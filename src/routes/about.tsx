@@ -26,8 +26,15 @@ function About() {
 						di browser, buka profilmu.
 					</li>
 					<li>
+						F12 → Console. Kalau Chrome menampilkan warning paste, ketik{" "}
+						<code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm text-slate-800">
+							allow pasting
+						</code>{" "}
+						lalu Enter.
+					</li>
+					<li>
 						Klik <strong className="text-slate-800">Salin Script</strong>, paste
-						di Console (F12), Enter.
+						di Console, Enter.
 					</li>
 					<li>Panel di pojok kanan akan list + hapus repost otomatis.</li>
 				</ol>

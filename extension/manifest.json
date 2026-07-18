@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Remove Repost TikTok",
+  "version": "1.0.1",
+  "description": "Hapus repost TikTok dari dashboard — jalan di tab TikTok yang sudah login.",
+  "permissions": ["tabs", "storage", "scripting"],
+  "host_permissions": [
+    "https://www.tiktok.com/*",
+    "https://*.tiktok.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.tiktok.com/*", "https://*.tiktok.com/*"],
+      "js": ["content-tiktok.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "exclude_matches": [
+        "https://www.tiktok.com/*",
+        "https://*.tiktok.com/*"
+      ],
+      "js": ["content-bridge.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_title": "Remove Repost TikTok"
+  }
+}

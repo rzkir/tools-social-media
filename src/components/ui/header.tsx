@@ -23,7 +23,7 @@ function headerCopyFromPath(pathname: string): {
 	if (pathname.startsWith("/dashboard/tiktok")) {
 		return {
 			title: "TikTok Tool",
-			subtitle: "Load and remove reposts",
+			subtitle: "Remove reposts via Chrome extension",
 		};
 	}
 	return {

@@ -37,6 +37,7 @@ export function BrowserScriptPanel({
 	variant = "card",
 }: BrowserScriptPanelProps) {
 	const [copied, setCopied] = useState(false);
+	const [copiedAllow, setCopiedAllow] = useState(false);
 
 	const script = useMemo(
 		() =>
@@ -54,32 +55,33 @@ export function BrowserScriptPanel({
 		window.setTimeout(() => setCopied(false), 2000);
 	};
 
-	const profileUrl = username.trim()
-		? `https://www.tiktok.com/@${username.trim().replace(/^@/, "")}`
+	const onCopyAllowPasting = async () => {
+		await navigator.clipboard.writeText("allow pasting");
+		setCopiedAllow(true);
+		window.setTimeout(() => setCopiedAllow(false), 2000);
+	};
+
+	const handle = username.trim().replace(/^@/, "");
+	const profileUrl = handle
+		? `https://www.tiktok.com/@${handle}`
 		: "https://www.tiktok.com";
+	const canCopy = Boolean(handle);
 
 	const body = (
 		<>
-			{variant === "card" ? (
-				<div className="mb-4">
-					<p className="mb-1 text-xs font-bold tracking-widest text-indigo-600 uppercase">
-						Mode andal
-					</p>
-					<h2 className="m-0 text-xl font-semibold text-slate-900">
-						Script Browser (disarankan)
-					</h2>
-					<p className="mt-1 text-sm text-slate-400">
-						Request dari server sering ditolak TikTok (respons kosong). Script
-						ini jalan di tab tiktok.com — sama seperti extension — jadi cookie
-						&amp; anti-bot browser dipakai otomatis.
-					</p>
-				</div>
-			) : (
-				<p className="mb-4 text-sm text-slate-400">
-					Simpan username di session, lalu salin script untuk hapus repost di
-					Console TikTok.
+			<div className="mb-5">
+				<p className="mb-1 text-xs font-bold tracking-widest text-indigo-600 uppercase">
+					Cara kerja
 				</p>
-			)}
+				<h2 className="m-0 text-xl font-semibold text-slate-900">
+					Jalankan di Console TikTok
+				</h2>
+				<p className="mt-1 text-sm text-slate-400">
+					TikTok memblokir hapus dari server. Yang berfungsi: salin script dari
+					sini → paste di Console tab profilmu. Panel hitam di pojok kanan
+					menunjukkan progress.
+				</p>
+			</div>
 
 			<FieldGroup>
 				<Field>
@@ -101,16 +103,17 @@ export function BrowserScriptPanel({
 						id="browser-secuid"
 						value={secUid}
 						onChange={(e) => onSecUidChange(e.target.value)}
-						placeholder="MS4wLjABAAAA… — kosongkan jika script cari sendiri"
+						placeholder="MS4wLjABAAAA… — biasanya otomatis"
 					/>
 					<FieldDescription>
-						Kalau kosong, script membaca secUid dari halaman profil.
+						Kosongkan saja jika sudah pernah verifikasi / script baca dari
+						profil.
 					</FieldDescription>
 				</Field>
 
 				<Field orientation="horizontal" className="items-center gap-2">
 					<FieldLabel htmlFor="browser-speed" className="text-xs">
-						Kecepatan
+						Kecepatan hapus
 					</FieldLabel>
 					<select
 						id="browser-speed"
@@ -124,46 +127,69 @@ export function BrowserScriptPanel({
 					</select>
 				</Field>
 
-				<ol className="m-0 list-decimal space-y-2 pl-5 text-sm leading-6 text-slate-400">
-					<li>
-						Buka profilmu:{" "}
+				<ol className="m-0 space-y-3 list-none p-0">
+					<li className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+						<p className="m-0 text-xs font-bold tracking-widest text-indigo-600 uppercase">
+							1 · Buka profil
+						</p>
+						<p className="mt-1 mb-2 text-sm text-slate-600">
+							Login TikTok, buka halaman profilmu (bukan For You).
+						</p>
 						<a
 							href={profileUrl}
 							target="_blank"
 							rel="noreferrer"
-							className="font-semibold text-indigo-600"
+							className="inline-flex items-center justify-center rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-800 no-underline ring-1 ring-slate-200 hover:bg-slate-100"
 						>
-							{profileUrl}
-						</a>{" "}
-						(harus login).
+							Buka {handle ? `@${handle}` : "TikTok"}
+						</a>
 					</li>
-					<li>
-						Tekan F12 → tab <strong className="text-slate-700">Console</strong>.
+					<li className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+						<p className="m-0 text-xs font-bold tracking-widest text-indigo-600 uppercase">
+							2 · Izinkan paste
+						</p>
+						<p className="mt-1 mb-2 text-sm text-slate-600">
+							F12 → tab Console. Kalau muncul warning, ketik{" "}
+							<code className="rounded bg-white px-1 font-mono text-xs">
+								allow pasting
+							</code>{" "}
+							lalu Enter.
+						</p>
+						<Button
+							variant="secondary"
+							size="sm"
+							onClick={() => void onCopyAllowPasting()}
+						>
+							{copiedAllow ? "Tersalin!" : "Salin “allow pasting”"}
+						</Button>
 					</li>
-					<li>
-						Klik <strong className="text-slate-700">Salin Script</strong> di
-						bawah, paste di Console, Enter.
+					<li className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+						<p className="m-0 text-xs font-bold tracking-widest text-indigo-600 uppercase">
+							3 · Jalankan script
+						</p>
+						<p className="mt-1 mb-2 text-sm text-slate-600">
+							Salin script → paste di Console → Enter. Jangan tutup tab sampai
+							status “Selesai”.
+						</p>
+						<Button onClick={() => void onCopy()} size="lg" disabled={!canCopy}>
+							{copied ? "Tersalin! Paste di Console" : "Salin Script"}
+						</Button>
+						{!canCopy ? (
+							<p className="mt-2 mb-0 text-xs text-orange-700">
+								Isi username dulu.
+							</p>
+						) : null}
 					</li>
-					<li>Panel hitam muncul di pojok kanan — tunggu sampai selesai.</li>
+					<li className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+						<p className="m-0 text-xs font-bold tracking-widest text-emerald-700 uppercase">
+							4 · Tunggu panel hitam
+						</p>
+						<p className="mt-1 mb-0 text-sm text-emerald-900">
+							“Memuat …” = sedang list. “Hapus 12/770 …” = sedang hapus. Selesai
+							kalau tertulis “Selesai. Berhasil …”.
+						</p>
+					</li>
 				</ol>
-
-				<Field orientation="horizontal" className="flex-wrap pt-1">
-					<Button onClick={onCopy} size="lg">
-						{copied ? "Tersalin!" : "Salin Script"}
-					</Button>
-					<a
-						href={profileUrl}
-						target="_blank"
-						rel="noreferrer"
-						className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-5 py-2.5 text-sm font-semibold text-slate-700 no-underline hover:bg-slate-100"
-					>
-						Buka TikTok
-					</a>
-				</Field>
-
-				<pre className="m-0 max-h-40 overflow-auto rounded-2xl border border-slate-100 bg-slate-50 p-3 text-[10px] leading-4 text-slate-400">
-					{script.slice(0, 500)}…
-				</pre>
 			</FieldGroup>
 		</>
 	);

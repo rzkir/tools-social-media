@@ -3,19 +3,22 @@
  * (same-origin fetch — bypasses server anti-bot empty responses).
  */
 export function buildTikTokBrowserScript(options: {
-  secUid?: string
-  uniqueId?: string
-  delayMs: number
+	secUid?: string;
+	uniqueId?: string;
+	delayMs: number;
 }): string {
-  const secUid = JSON.stringify(options.secUid?.trim() || '')
-  const uniqueId = JSON.stringify(options.uniqueId?.trim().replace(/^@/, '') || '')
-  const delayMs = Math.max(500, Math.floor(options.delayMs))
+	const secUid = JSON.stringify(options.secUid?.trim() || "");
+	const uniqueId = JSON.stringify(
+		options.uniqueId?.trim().replace(/^@/, "") || "",
+	);
+	const delayMs = Math.max(500, Math.floor(options.delayMs));
 
-  return `(() => {
+	return `(() => {
   const CONFIG = {
     secUid: ${secUid},
     uniqueId: ${uniqueId},
     delayMs: ${delayMs},
+    maxPages: 200,
   };
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -85,7 +88,7 @@ export function buildTikTokBrowserScript(options: {
     panel.id = "rr-tiktok-panel";
     panel.innerHTML =
       '<div style="font:600 13px system-ui;color:#00f2ea;margin-bottom:8px">Remove Repost</div>' +
-      '<div id="rr-status" style="font:12px/1.4 system-ui;color:#eee;min-height:40px">Menyiapkan…</div>' +
+      '<div id="rr-status" style="font:12px/1.4 system-ui;color:#eee;min-height:48px">Menyiapkan…</div>' +
       '<div style="display:flex;gap:8px;margin-top:10px">' +
       '<button id="rr-stop" style="flex:1;padding:8px;border:0;border-radius:8px;background:#ff0050;color:#fff;font-weight:600;cursor:pointer">Stop</button>' +
       '<button id="rr-close" style="padding:8px 10px;border:1px solid #333;border-radius:8px;background:#111;color:#aaa;cursor:pointer">✕</button>' +
@@ -109,57 +112,66 @@ export function buildTikTokBrowserScript(options: {
 
   async function run() {
     if (!location.hostname.includes("tiktok.com")) {
-      alert("Jalankan script ini di tab https://www.tiktok.com (buka profilmu dulu).");
+      alert("Buka tab https://www.tiktok.com/@username dulu (harus login), baru paste script di Console.");
       return;
     }
 
-    const panel = ensurePanel();
-    const status = () => panel.querySelector("#rr-status");
-    const set = (t) => { const el = status(); if (el) el.textContent = t; };
-    let stopped = false;
-    panel.querySelector("#rr-stop").onclick = () => { stopped = true; set("Dihentikan."); };
-    panel.querySelector("#rr-close").onclick = () => panel.remove();
-
     if (CONFIG.uniqueId) {
       const path = "/@" + CONFIG.uniqueId;
-      if (!location.pathname.includes(path)) {
-        set("Membuka profil @" + CONFIG.uniqueId + "…");
-        location.href = "https://www.tiktok.com/@" + CONFIG.uniqueId;
+      if (!location.pathname.toLowerCase().includes(path.toLowerCase())) {
+        alert(
+          "Kamu belum di halaman profil @" + CONFIG.uniqueId + ".\\n\\n" +
+          "1) Buka https://www.tiktok.com/@" + CONFIG.uniqueId + "\\n" +
+          "2) Pastikan login\\n" +
+          "3) Paste script lagi di Console"
+        );
         return;
       }
     }
 
+    const panel = ensurePanel();
+    const set = (t) => {
+      const el = panel.querySelector("#rr-status");
+      if (el) el.textContent = t;
+    };
+    let stopped = false;
+    panel.querySelector("#rr-stop").onclick = () => { stopped = true; set("Dihentikan."); };
+    panel.querySelector("#rr-close").onclick = () => panel.remove();
+
     set("Mencari secUid…");
-    await sleep(800);
+    await sleep(600);
     const secUid = pickSecUidFromPage();
     if (!secUid) {
-      set("secUid tidak ditemukan. Buka profilmu, lalu jalankan script lagi.");
+      set("secUid tidak ditemukan. Pastikan kamu login & di halaman profil sendiri, lalu paste ulang.");
       return;
     }
 
-    set("Mengambil daftar repost…");
+    set("Memuat daftar repost…");
     const all = [];
     let cursor = "0";
-    for (let page = 1; page <= 80; page++) {
+    for (let page = 1; page <= CONFIG.maxPages; page++) {
       if (stopped) return;
       const pageData = await listPage(secUid, cursor);
       all.push(...pageData.items);
-      set("Halaman " + page + " · total " + all.length + " repost");
+      set("Memuat " + page + " · total " + all.length + " repost");
       if (!pageData.hasMore || !pageData.cursor) break;
       cursor = pageData.cursor;
-      await sleep(CONFIG.delayMs);
+      await sleep(Math.min(CONFIG.delayMs, 1200));
     }
 
     if (!all.length) {
-      set("Tidak ada repost ditemukan.");
+      set("Tidak ada repost. Cek tab Repost di profil TikTok.");
       return;
     }
+
+    set("Siap hapus " + all.length + " repost. Mulai…");
+    await sleep(800);
 
     let ok = 0;
     let fail = 0;
     for (let i = 0; i < all.length; i++) {
       if (stopped) {
-        set("Stop. Berhasil " + ok + " / gagal " + fail + " / sisa " + (all.length - i));
+        set("Stop. OK " + ok + " · gagal " + fail + " · sisa " + (all.length - i));
         return;
       }
       const item = all[i];
@@ -169,7 +181,7 @@ export function buildTikTokBrowserScript(options: {
         set("Hapus " + (i + 1) + "/" + all.length + " · " + item.author + " · OK " + ok);
       } catch (e) {
         fail++;
-        set("Gagal " + item.id + ": " + (e && e.message ? e.message : e));
+        set("Gagal " + (i + 1) + "/" + all.length + ": " + (e && e.message ? e.message : e));
       }
       await sleep(CONFIG.delayMs);
     }
@@ -177,5 +189,5 @@ export function buildTikTokBrowserScript(options: {
   }
 
   run().catch((e) => alert(String(e && e.message ? e.message : e)));
-})();`
+})();`;
 }
