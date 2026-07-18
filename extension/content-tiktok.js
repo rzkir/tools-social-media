@@ -1,14 +1,47 @@
 /**
- * Runs on tiktok.com — list + remove reposts (same-origin fetch).
+ * Runs on tiktok.com — list + remove reposts OR favorites (same-origin fetch).
+ * Modes: "repost" | "favorite"
  */
 (() => {
+  if (window.__rrTikTokLoaded) return;
+  window.__rrTikTokLoaded = true;
+
   let stopped = false;
   let panel = null;
+  let activeMode = "repost";
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  const LABELS = {
+    repost: {
+      title: "Remove Repost",
+      noun: "repost",
+      listing: "repost",
+      empty: "Tidak ada repost.",
+    },
+    favorite: {
+      title: "Remove Favorite",
+      noun: "favorite",
+      listing: "favorite",
+      empty: "Tidak ada favorite.",
+    },
+  };
+
+  function labels() {
+    return LABELS[activeMode] || LABELS.repost;
+  }
+
   function report(payload) {
-    chrome.runtime.sendMessage({ type: "PROGRESS", ...payload }).catch(() => {});
+    try {
+      chrome.runtime.sendMessage(
+        { type: "PROGRESS", mode: activeMode, ...payload },
+        () => {
+          void chrome.runtime.lastError;
+        },
+      );
+    } catch {
+      // ignore
+    }
   }
 
   function ensurePanel() {
@@ -16,7 +49,7 @@
     panel = document.createElement("div");
     panel.id = "rr-tiktok-panel";
     panel.innerHTML =
-      '<div style="font:600 13px system-ui;color:#00f2ea;margin-bottom:8px">Remove Repost</div>' +
+      '<div id="rr-title" style="font:600 13px system-ui;color:#00f2ea;margin-bottom:8px">Remove</div>' +
       '<div id="rr-status" style="font:12px/1.4 system-ui;color:#eee;min-height:48px">Menyiapkan…</div>' +
       '<div style="display:flex;gap:8px;margin-top:10px">' +
       '<button id="rr-stop" style="flex:1;padding:8px;border:0;border-radius:8px;background:#ff0050;color:#fff;font-weight:600;cursor:pointer">Stop</button>' +
@@ -45,8 +78,21 @@
 
   function setStatus(t) {
     ensurePanel();
+    const title = panel.querySelector("#rr-title");
+    if (title) title.textContent = labels().title;
     const el = panel.querySelector("#rr-status");
     if (el) el.textContent = t;
+  }
+
+  function closePanel(delayMs = 1800) {
+    window.setTimeout(() => {
+      const el =
+        panel && document.contains(panel)
+          ? panel
+          : document.getElementById("rr-tiktok-panel");
+      if (el) el.remove();
+      panel = null;
+    }, delayMs);
   }
 
   function pickSecUid(configured) {
@@ -59,25 +105,36 @@
   }
 
   async function listPage(secUid, cursor) {
+    const path =
+      activeMode === "favorite"
+        ? "/api/user/collect/item_list/"
+        : "/api/repost/item_list/";
+
     const params = new URLSearchParams({
       aid: "1988",
       count: "30",
       coverFormat: "2",
       cursor: String(cursor),
-      needPinnedItemIds: "true",
-      post_item_list_request_type: "0",
       secUid,
     });
-    const res = await fetch("/api/repost/item_list/?" + params.toString(), {
+
+    if (activeMode === "repost") {
+      params.set("needPinnedItemIds", "true");
+      params.set("post_item_list_request_type", "0");
+    }
+
+    const res = await fetch(path + "?" + params.toString(), {
       method: "GET",
       headers: { accept: "*/*" },
       credentials: "include",
     });
     const text = await res.text();
-    if (!text.trim()) throw new Error("Respons kosong dari /api/repost/item_list/");
+    if (!text.trim()) throw new Error("Respons kosong dari " + path);
     const json = JSON.parse(text);
     if (json.status_code != null && json.status_code !== 0) {
-      throw new Error("status_code " + json.status_code + ": " + (json.status_msg || ""));
+      throw new Error(
+        "status_code " + json.status_code + ": " + (json.status_msg || ""),
+      );
     }
     const items = (json.itemList || []).map((e) => ({
       id: String(e.id),
@@ -90,11 +147,17 @@
     };
   }
 
-  async function removeOne(itemId) {
-    const params = new URLSearchParams({ aid: "1988", item_id: String(itemId) });
+  async function removeRepost(itemId) {
+    const params = new URLSearchParams({
+      aid: "1988",
+      item_id: String(itemId),
+    });
     const res = await fetch("/tiktok/v1/upvote/delete?" + params.toString(), {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded", accept: "*/*" },
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "*/*",
+      },
       body: "",
       credentials: "include",
     });
@@ -106,9 +169,70 @@
     }
   }
 
-  async function run({ uniqueId, secUid: secUidHint, delayMs }) {
+  /** Uncollect / remove from Favorites. */
+  async function removeFavorite(itemId) {
+    const attempts = [
+      {
+        url: "/api/commit/item/collect/",
+        params: { aid: "1988", itemId: String(itemId), type: "0" },
+      },
+      {
+        url: "/api/commit/item/collect/",
+        params: { aid: "1988", itemId: String(itemId), actionType: "0" },
+      },
+      {
+        url: "/tiktok/v1/item/collect/",
+        params: { aid: "1988", item_id: String(itemId), action_type: "0" },
+      },
+    ];
+
+    let lastErr = "gagal hapus favorite " + itemId;
+    for (const attempt of attempts) {
+      const qs = new URLSearchParams(attempt.params);
+      const res = await fetch(attempt.url + "?" + qs.toString(), {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          accept: "*/*",
+        },
+        body: "",
+        credentials: "include",
+      });
+      const text = await res.text();
+      if (!text.trim()) {
+        lastErr = "Respons kosong dari " + attempt.url;
+        continue;
+      }
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        lastErr = "JSON invalid dari " + attempt.url;
+        continue;
+      }
+      if (json.status_code == null || json.status_code === 0) return;
+      lastErr = json.status_msg || "status_code " + json.status_code;
+    }
+    throw new Error(lastErr);
+  }
+
+  async function removeOne(itemId) {
+    if (activeMode === "favorite") return removeFavorite(itemId);
+    return removeRepost(itemId);
+  }
+
+  function profileUrl(uniqueId) {
+    if (activeMode === "favorite") {
+      return "https://www.tiktok.com/@" + uniqueId + "?lang=en";
+    }
+    return "https://www.tiktok.com/@" + uniqueId;
+  }
+
+  async function run({ uniqueId, secUid: secUidHint, delayMs, mode }) {
     stopped = false;
+    activeMode = mode === "favorite" ? "favorite" : "repost";
     ensurePanel();
+    setStatus("Menyiapkan…");
 
     if (uniqueId) {
       const path = "/@" + uniqueId;
@@ -116,9 +240,14 @@
         setStatus("Membuka profil @" + uniqueId + "…");
         report({ status: "navigating" });
         chrome.storage.session.set({
-          rrPendingRun: { uniqueId, secUid: secUidHint, delayMs },
+          rrPendingRun: {
+            uniqueId,
+            secUid: secUidHint,
+            delayMs,
+            mode: activeMode,
+          },
         });
-        location.href = "https://www.tiktok.com/@" + uniqueId;
+        location.href = profileUrl(uniqueId);
         return;
       }
     }
@@ -134,16 +263,18 @@
       return;
     }
 
+    const noun = labels().listing;
     const all = [];
     let cursor = "0";
     for (let page = 1; page <= 200; page++) {
       if (stopped) {
         report({ status: "stopped", progress: { listed: all.length, page } });
+        closePanel(2500);
         return;
       }
       const pageData = await listPage(secUid, cursor);
       all.push(...pageData.items);
-      setStatus("Memuat " + page + " · total " + all.length + " repost");
+      setStatus("Memuat " + page + " · total " + all.length + " " + noun);
       report({
         status: "listing",
         progress: { page, listed: all.length, total: all.length },
@@ -154,8 +285,12 @@
     }
 
     if (!all.length) {
-      setStatus("Tidak ada repost.");
-      report({ status: "done", progress: { total: 0, done: 0, failed: 0, listed: 0 } });
+      setStatus(labels().empty);
+      report({
+        status: "done",
+        progress: { total: 0, done: 0, failed: 0, listed: 0 },
+      });
+      closePanel();
       return;
     }
 
@@ -168,22 +303,44 @@
 
     for (let i = 0; i < all.length; i++) {
       if (stopped) {
-        setStatus("Stop. OK " + ok + " · gagal " + fail + " · sisa " + (all.length - i));
+        setStatus(
+          "Stop. OK " + ok + " · gagal " + fail + " · sisa " + (all.length - i),
+        );
         report({
           status: "stopped",
-          progress: { total: all.length, done: ok, failed: fail, listed: all.length },
+          progress: {
+            total: all.length,
+            done: ok,
+            failed: fail,
+            listed: all.length,
+          },
         });
+        closePanel(2500);
         return;
       }
       const item = all[i];
       try {
         await removeOne(item.id);
         ok++;
-        setStatus("Hapus " + (i + 1) + "/" + all.length + " · " + item.author + " · OK " + ok);
+        setStatus(
+          "Hapus " +
+            (i + 1) +
+            "/" +
+            all.length +
+            " · " +
+            item.author +
+            " · OK " +
+            ok,
+        );
       } catch (e) {
         fail++;
         setStatus(
-          "Gagal " + (i + 1) + "/" + all.length + ": " + (e && e.message ? e.message : e),
+          "Gagal " +
+            (i + 1) +
+            "/" +
+            all.length +
+            ": " +
+            (e && e.message ? e.message : e),
         );
       }
       report({
@@ -201,11 +358,21 @@
     setStatus("Selesai. Berhasil " + ok + ", gagal " + fail + ".");
     report({
       status: "done",
-      progress: { total: all.length, done: ok, failed: fail, listed: all.length },
+      progress: {
+        total: all.length,
+        done: ok,
+        failed: fail,
+        listed: all.length,
+      },
     });
+    closePanel();
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === "RR_PING_CS") {
+      sendResponse({ ok: true });
+      return true;
+    }
     if (msg?.type === "RR_STOP") {
       stopped = true;
       setStatus("Dihentikan.");
@@ -217,6 +384,7 @@
         uniqueId: msg.uniqueId,
         secUid: msg.secUid,
         delayMs: msg.delayMs || 1500,
+        mode: msg.mode || "repost",
       }).catch((e) => {
         const err = e instanceof Error ? e.message : String(e);
         setStatus("Error: " + err);
@@ -232,7 +400,6 @@
     return false;
   });
 
-  // Auto-resume after redirect to profile (START left a flag)
   chrome.storage.session.get(["rrPendingRun"]).then((data) => {
     const pending = data.rrPendingRun;
     if (!pending) return;

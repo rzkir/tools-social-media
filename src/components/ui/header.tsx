@@ -20,10 +20,22 @@ function headerCopyFromPath(pathname: string): {
 			subtitle: "Manage connected social profiles",
 		};
 	}
+	if (pathname.startsWith("/dashboard/tiktok/repost")) {
+		return {
+			title: "Remove Repost",
+			subtitle: "Hapus repost via Chrome extension",
+		};
+	}
+	if (pathname.startsWith("/dashboard/tiktok/favorite")) {
+		return {
+			title: "Favorite",
+			subtitle: "Hapus favorite via Chrome extension",
+		};
+	}
 	if (pathname.startsWith("/dashboard/tiktok")) {
 		return {
 			title: "TikTok Tool",
-			subtitle: "Remove reposts via Chrome extension",
+			subtitle: "Overview metrics & tools",
 		};
 	}
 	return {

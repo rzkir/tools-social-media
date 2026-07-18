@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        width: 280px;
+        font: 13px/1.45 system-ui, sans-serif;
+        background: #111;
+        color: #eee;
+        padding: 14px;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        color: #00f2ea;
+      }
+      p {
+        margin: 0 0 12px;
+        color: #aaa;
+        font-size: 12px;
+      }
+      .status {
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        margin-bottom: 12px;
+        font-size: 12px;
+      }
+      .ok {
+        color: #4ade80;
+      }
+      .bad {
+        color: #f87171;
+      }
+      button {
+        width: 100%;
+        margin: 0 0 8px;
+        padding: 9px 10px;
+        border: 0;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        background: #00f2ea;
+        color: #111;
+      }
+      button.secondary {
+        background: #222;
+        color: #eee;
+        border: 1px solid #333;
+      }
+      code {
+        font-size: 10px;
+        word-break: break-all;
+        color: #888;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Remove Repost TikTok</h1>
+    <p>Kontrol dari dashboard. Ikon ini hanya helper.</p>
+    <div id="status" class="status">Mengecek…</div>
+    <button id="openDash" type="button">Buka Dashboard</button>
+    <button id="openTt" class="secondary" type="button">Buka TikTok</button>
+    <code id="extId"></code>
+    <script src="popup.js"></script>
+  </body>
+</html>

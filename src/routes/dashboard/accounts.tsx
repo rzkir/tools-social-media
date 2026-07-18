@@ -68,10 +68,10 @@ function AccountsPage() {
 									label: "Tool",
 									value: (
 										<Link
-											to="/dashboard/tiktok"
+											to="/dashboard/tiktok/repost"
 											className="text-sm font-bold text-indigo-600 no-underline hover:underline"
 										>
-											Open TikTok Tool
+											Open Remove Repost
 										</Link>
 									),
 								},

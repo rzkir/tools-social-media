@@ -1,5 +1,6 @@
 /**
- * Dashboard ↔ Chrome extension bridge (via content-bridge.js postMessage).
+ * Dashboard ↔ Chrome extension bridge.
+ * Uses content-script postMessage first; chrome.runtime only with discovered ID.
  */
 
 export type ExtensionProgress = {
@@ -13,6 +14,7 @@ export type ExtensionProgress = {
 export type ExtensionState = {
 	running: boolean;
 	status: string;
+	mode?: string | null;
 	progress: ExtensionProgress;
 	lastError: string | null;
 };
@@ -23,6 +25,9 @@ type Pending = {
 	timer: number;
 };
 
+/** Fallback ID from extension/manifest.json "key" (if content script belum inject). */
+export const EXTENSION_ID = "pjpnmdefhndngihneippmchmialbibbf";
+
 const SOURCE_PAGE = "rr-dashboard";
 const SOURCE_EXT = "rr-extension";
 
@@ -31,6 +36,28 @@ const pending = new Map<number, Pending>();
 const stateListeners = new Set<(state: ExtensionState) => void>();
 let extensionReady = false;
 let lastState: ExtensionState | null = null;
+
+type ChromeRuntime = {
+	sendMessage: (
+		extensionId: string,
+		message: unknown,
+		responseCallback?: (response: unknown) => void,
+	) => void;
+	lastError?: { message?: string };
+};
+
+function getPageChromeRuntime(): ChromeRuntime | null {
+	if (typeof window === "undefined") return null;
+	const chromeApi = (
+		window as unknown as { chrome?: { runtime?: ChromeRuntime } }
+	).chrome;
+	return chromeApi?.runtime ?? null;
+}
+
+function discoveredExtensionId(): string | null {
+	if (typeof document === "undefined") return null;
+	return document.documentElement.getAttribute("data-rr-extension-id") || null;
+}
 
 function onWindowMessage(event: MessageEvent) {
 	if (event.source !== window) return;
@@ -64,9 +91,9 @@ function ensureListen() {
 	window.addEventListener("message", onWindowMessage);
 }
 
-function sendToExtension(
+function sendViaPostMessage(
 	payload: Record<string, unknown>,
-	timeoutMs = 15000,
+	timeoutMs: number,
 ): Promise<unknown> {
 	ensureListen();
 	return new Promise((resolve, reject) => {
@@ -75,13 +102,70 @@ function sendToExtension(
 			pending.delete(requestId);
 			reject(
 				new Error(
-					"Extension tidak merespons. Pastikan ekstensi terpasang & aktif.",
+					"Extension tidak merespons. Pastikan ekstensi terpasang & aktif, lalu hard refresh (Ctrl+Shift+R).",
 				),
 			);
 		}, timeoutMs);
 		pending.set(requestId, { resolve, reject, timer });
 		window.postMessage({ source: SOURCE_PAGE, requestId, payload }, "*");
 	});
+}
+
+function sendViaChromeRuntime(
+	payload: Record<string, unknown>,
+	timeoutMs: number,
+): Promise<unknown> {
+	const runtime = getPageChromeRuntime();
+	if (!runtime?.sendMessage) {
+		return Promise.reject(new Error("chrome.runtime unavailable"));
+	}
+
+	const extensionId = discoveredExtensionId() || EXTENSION_ID;
+
+	return new Promise((resolve, reject) => {
+		const timer = window.setTimeout(() => {
+			reject(new Error("Extension timeout (chrome.runtime)"));
+		}, timeoutMs);
+
+		try {
+			runtime.sendMessage(extensionId, payload, (response) => {
+				window.clearTimeout(timer);
+				const err = runtime.lastError;
+				if (err) {
+					reject(new Error(err.message || "Extension error"));
+					return;
+				}
+				resolve(response);
+			});
+		} catch (err) {
+			window.clearTimeout(timer);
+			reject(err);
+		}
+	});
+}
+
+async function sendToExtension(
+	payload: Record<string, unknown>,
+	timeoutMs = 15000,
+): Promise<unknown> {
+	ensureListen();
+
+	// Prefer content-script bridge (no extension-id mismatch)
+	if (hasExtensionMarker()) {
+		try {
+			return await sendViaPostMessage(payload, timeoutMs);
+		} catch {
+			// fall through
+		}
+	}
+
+	try {
+		return await sendViaChromeRuntime(payload, Math.min(timeoutMs, 2500));
+	} catch {
+		// fall through
+	}
+
+	return sendViaPostMessage(payload, timeoutMs);
 }
 
 /** Sync check: content script sets data-rr-extension on <html>. */
@@ -105,7 +189,6 @@ export function unmarkExtensionHost() {
 export async function pingExtension(): Promise<boolean> {
 	ensureListen();
 
-	// Fast path — content script already stamped the page
 	if (hasExtensionMarker()) {
 		extensionReady = true;
 		return true;
@@ -146,12 +229,14 @@ export async function startExtensionJob(options: {
 	uniqueId: string;
 	secUid?: string;
 	delayMs: number;
+	mode?: "repost" | "favorite";
 }): Promise<{ ok: boolean; error?: string }> {
 	const res = (await sendToExtension({
 		type: "START",
 		uniqueId: options.uniqueId,
 		secUid: options.secUid || "",
 		delayMs: options.delayMs,
+		mode: options.mode || "repost",
 	})) as { ok?: boolean; error?: string };
 	return { ok: Boolean(res?.ok), error: res?.error };
 }

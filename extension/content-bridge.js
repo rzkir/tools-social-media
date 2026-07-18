@@ -1,18 +1,26 @@
 /**
  * Bridge: dashboard page ↔ extension background via window.postMessage.
  * Marks the page with data-rr-extension so React can detect sync.
+ * Also re-stamps the marker (React hydration can wipe <html> attrs).
  */
 (() => {
   const SOURCE_PAGE = "rr-dashboard";
   const SOURCE_EXT = "rr-extension";
 
-  // Sync marker — works even before React mounts
-  try {
-    document.documentElement.setAttribute("data-rr-extension", "1");
-    document.documentElement.setAttribute("data-rr-extension-id", chrome.runtime.id);
-  } catch {
-    // ignore
+  function stamp() {
+    try {
+      document.documentElement.setAttribute("data-rr-extension", "1");
+      document.documentElement.setAttribute(
+        "data-rr-extension-id",
+        chrome.runtime.id,
+      );
+    } catch {
+      // ignore
+    }
   }
+
+  stamp();
+  setInterval(stamp, 1000);
 
   function isDashboardHost() {
     const path = location.pathname || "";
@@ -23,6 +31,7 @@
   }
 
   function announce() {
+    stamp();
     window.postMessage(
       {
         source: SOURCE_EXT,
@@ -50,8 +59,8 @@
     const payload = data.payload;
     if (!payload || typeof payload !== "object") return;
 
-    // PING always answered here (no background needed)
     if (payload.type === "PING") {
+      stamp();
       window.postMessage(
         {
           source: SOURCE_EXT,
@@ -68,18 +77,23 @@
       return;
     }
 
-    // Other commands only on dashboard pages
     if (!isDashboardHost()) return;
 
     chrome.runtime.sendMessage(payload, (response) => {
       const err = chrome.runtime.lastError;
+      const message = err?.message || "";
+      const friendly =
+        message.includes("Receiving end") ||
+        message.includes("Could not establish")
+          ? "Background ekstensi belum siap. Refresh halaman ini, lalu coba lagi."
+          : message;
       window.postMessage(
         {
           source: SOURCE_EXT,
           type: "RESPONSE",
           requestId: data.requestId,
           response: err
-            ? { ok: false, error: err.message }
+            ? { ok: false, error: friendly }
             : response || { ok: false, error: "No response" },
         },
         "*",
