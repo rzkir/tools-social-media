@@ -1,0 +1,2 @@
+# Optional — not required for cookie-based login.
+# Cookie values are pasted in the UI and never stored on the server.
