@@ -5,7 +5,7 @@
  */
 
 /** Keep in sync with extension/content-tiktok.js CS_VERSION */
-const CS_VERSION = 8;
+const CS_VERSION = 9;
 
 /**
  * Unlike (Disukai) — proven /api/commit/item/digg/ type=0.
@@ -109,11 +109,21 @@ async function undiggInMainWorld(awemeId) {
       if (res.ok || res.status === 200) return { ok: true };
       return { ok: false, error: "empty HTTP " + res.status };
     }
+    if (res.status === 429 || /ratelimit/i.test(raw)) {
+      return {
+        ok: false,
+        error:
+          "TikTok rate-limit. Tunggu 1–2 menit, pakai kecepatan Aman, lalu coba lagi.",
+      };
+    }
     let json;
     try {
       json = JSON.parse(raw);
     } catch {
-      return { ok: false, error: "invalid JSON" };
+      return {
+        ok: false,
+        error: "Respons bukan JSON: " + raw.slice(0, 60),
+      };
     }
     const code = json.status_code ?? json.statusCode;
     if (code === 0 || code === "0") return { ok: true };
@@ -254,11 +264,16 @@ async function uncollectInMainWorld(awemeId) {
         lastErr = "empty HTTP " + res.status;
         continue;
       }
+      if (res.status === 429 || /ratelimit/i.test(raw)) {
+        lastErr =
+          "TikTok rate-limit. Tunggu 1–2 menit, pakai kecepatan Aman, lalu coba lagi.";
+        continue;
+      }
       let json;
       try {
         json = JSON.parse(raw);
       } catch {
-        lastErr = "invalid JSON";
+        lastErr = "Respons bukan JSON: " + raw.slice(0, 60);
         continue;
       }
       const code = json.status_code ?? json.statusCode;

@@ -9,7 +9,7 @@
  * without stacking duplicate listeners (background still reloads on START).
  */
 (() => {
-  const CS_VERSION = 8;
+  const CS_VERSION = 9;
 
   let stopped = false;
   let panel = null;
@@ -141,7 +141,34 @@
     return s;
   }
 
-  async function listPage(secUid, cursor) {
+  function isRateLimited(text, status) {
+    if (status === 429) return true;
+    return /ratelimit/i.test(String(text || ""));
+  }
+
+  function rateLimitError(path) {
+    return new Error(
+      "TikTok rate-limit di " +
+        path +
+        ". Tunggu 1–2 menit, turunkan kecepatan ke Aman, lalu Start lagi.",
+    );
+  }
+
+  function parseApiJson(text, path, status) {
+    const raw = String(text || "").trim();
+    if (!raw) throw new Error("Respons kosong dari " + path);
+    if (isRateLimited(raw, status)) throw rateLimitError(path);
+    try {
+      return JSON.parse(raw);
+    } catch {
+      const preview = raw.slice(0, 80).replace(/\s+/g, " ");
+      throw new Error(
+        "Respons bukan JSON dari " + path + ": " + preview,
+      );
+    }
+  }
+
+  async function listPageOnce(secUid, cursor) {
     const path =
       activeMode === "favorite"
         ? "/api/user/collect/item_list/"
@@ -168,13 +195,12 @@
       credentials: "include",
     });
     const text = await res.text();
-    if (!text.trim()) throw new Error("Respons kosong dari " + path);
-    const json = JSON.parse(text);
+    const json = parseApiJson(text, path, res.status);
     const code = json.status_code ?? json.statusCode;
     if (code != null && code !== 0) {
-      throw new Error(
-        "status_code " + code + ": " + (json.status_msg || ""),
-      );
+      const msg = String(json.status_msg || json.statusMsg || "");
+      if (isRateLimited(msg, res.status)) throw rateLimitError(path);
+      throw new Error("status_code " + code + ": " + msg);
     }
 
     const rawItems = json.itemList || json.item_list || [];
@@ -221,6 +247,33 @@
           );
 
     return { items, hasMore, cursor: nextCursor };
+  }
+
+  async function listPage(secUid, cursor) {
+    const waits = [4000, 8000, 15000];
+    let lastErr = null;
+    for (let attempt = 0; attempt <= waits.length; attempt++) {
+      if (stopped) throw new Error("Dihentikan.");
+      try {
+        return await listPageOnce(secUid, cursor);
+      } catch (e) {
+        lastErr = e;
+        const msg = e && e.message ? e.message : String(e);
+        const retryable = /rate-limit|ratelimit/i.test(msg);
+        if (!retryable || attempt >= waits.length) throw e;
+        const wait = waits[attempt];
+        setStatus(
+          "Rate-limit TikTok — menunggu " +
+            Math.round(wait / 1000) +
+            "s lalu coba lagi…",
+        );
+        report({
+          status: "listing",
+        });
+        await sleep(wait);
+      }
+    }
+    throw lastErr || new Error("Gagal memuat daftar.");
   }
 
   function getCookie(name) {
@@ -270,15 +323,19 @@
       credentials: "include",
     });
     const text = await res.text();
-    if (!text.trim()) throw new Error("Respons kosong saat hapus " + itemId);
     let json;
     try {
-      json = JSON.parse(text);
-    } catch {
-      throw new Error("JSON invalid saat hapus " + itemId);
+      json = parseApiJson(text, "/tiktok/v1/upvote/delete", res.status);
+    } catch (e) {
+      throw e;
     }
     const st = apiStatus(json);
-    if (!st.ok) throw new Error(st.msg || "gagal hapus " + itemId);
+    if (!st.ok) {
+      if (isRateLimited(st.msg, res.status)) {
+        throw rateLimitError("/tiktok/v1/upvote/delete");
+      }
+      throw new Error(st.msg || "gagal hapus " + itemId);
+    }
   }
 
   /**

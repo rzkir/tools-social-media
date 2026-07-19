@@ -17,6 +17,7 @@ function statusCopy(
 	status: string,
 	listingWord: string,
 	progress: ExtensionState["progress"] | undefined,
+	lastError?: string | null,
 ): { title: string; detail: string } {
 	switch (status) {
 		case "starting":
@@ -47,8 +48,12 @@ function statusCopy(
 			};
 		case "error":
 			return {
-				title: "Gagal",
-				detail: "Terjadi error saat proses berjalan.",
+				title: /rate-?limit/i.test(lastError || "")
+					? "Rate-limit TikTok"
+					: "Gagal",
+				detail:
+					lastError ||
+					"Terjadi error saat proses berjalan. Coba lagi dengan kecepatan Aman.",
 			};
 		default:
 			return {
@@ -84,7 +89,7 @@ export function TikTokProgressDialog({
 }: TikTokProgressDialogProps) {
 	const status = extState?.status || "idle";
 	const progress = extState?.progress;
-	const copy = statusCopy(status, listingWord, progress);
+	const copy = statusCopy(status, listingWord, progress, extState?.lastError);
 	const pct = progressPercent(extState);
 	const showBar = status === "listing" || status === "removing" || running;
 

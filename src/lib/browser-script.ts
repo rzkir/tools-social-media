@@ -49,7 +49,17 @@ export function buildTikTokBrowserScript(options: {
     });
     const text = await res.text();
     if (!text.trim()) throw new Error("Respons kosong dari /api/repost/item_list/");
-    const json = JSON.parse(text);
+    if (res.status === 429 || /ratelimit/i.test(text)) {
+      throw new Error(
+        "TikTok rate-limit. Tunggu 1–2 menit, turunkan kecepatan, lalu coba lagi.",
+      );
+    }
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error("Respons bukan JSON: " + text.slice(0, 80));
+    }
     if (json.status_code != null && json.status_code !== 0) {
       throw new Error("status_code " + json.status_code + ": " + (json.status_msg || ""));
     }
@@ -75,7 +85,15 @@ export function buildTikTokBrowserScript(options: {
     });
     const text = await res.text();
     if (!text.trim()) throw new Error("Respons kosong saat hapus " + itemId);
-    const json = JSON.parse(text);
+    if (res.status === 429 || /ratelimit/i.test(text)) {
+      throw new Error("TikTok rate-limit saat hapus. Tunggu sebentar lalu lanjut.");
+    }
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error("Respons bukan JSON: " + text.slice(0, 80));
+    }
     if (json.status_code != null && json.status_code !== 0) {
       throw new Error(json.status_msg || ("gagal hapus " + itemId));
     }
