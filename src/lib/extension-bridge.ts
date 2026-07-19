@@ -298,3 +298,50 @@ export async function fetchExtensionState(): Promise<ExtensionState | null> {
 	}
 	return lastState;
 }
+
+export type TikTokCookieAutofill = {
+	sessionid: string;
+	tt_csrf_token: string;
+	msToken: string;
+	ttwid: string;
+	s_v_web_id: string;
+	username?: string;
+	secUid?: string;
+};
+
+/** Read TikTok session cookies from the browser via the Chrome extension. */
+export async function fetchTikTokCookies(options?: {
+	uniqueId?: string;
+}): Promise<{
+	ok: boolean;
+	values?: TikTokCookieAutofill;
+	error?: string;
+	warning?: string;
+}> {
+	const uniqueId = String(options?.uniqueId || "")
+		.replace(/^@/, "")
+		.trim();
+	const res = (await sendToExtension(
+		{
+			type: "GET_TIKTOK_COOKIES",
+			uniqueId: uniqueId || undefined,
+		},
+		20000,
+	)) as {
+		ok?: boolean;
+		values?: TikTokCookieAutofill;
+		error?: string;
+		warning?: string;
+	};
+
+	if (!res?.ok || !res.values?.sessionid) {
+		return {
+			ok: false,
+			error:
+				res?.error ||
+				"Cookie TikTok tidak ditemukan. Login di tab tiktok.com dulu, pastikan ekstensi aktif, lalu coba lagi.",
+		};
+	}
+
+	return { ok: true, values: res.values, warning: res.warning };
+}

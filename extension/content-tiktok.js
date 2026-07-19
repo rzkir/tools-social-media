@@ -1,5 +1,5 @@
 (() => {
-  const CS_VERSION = 14;
+  const CS_VERSION = 16;
 
   let stopped = false;
   let panel = null;
@@ -680,6 +680,79 @@
     closePanel();
   }
 
+  function readLoggedInUserFromPage() {
+    function pick(scope) {
+      if (!scope || typeof scope !== "object") return null;
+      const ctxUser = scope["webapp.app-context"]?.user;
+      if (ctxUser && typeof ctxUser === "object") {
+        const username = String(
+          ctxUser.uniqueId || ctxUser.unique_id || "",
+        ).trim();
+        const secUid = String(ctxUser.secUid || ctxUser.sec_uid || "").trim();
+        if (username) return { username, secUid };
+      }
+      const detailUser = scope["webapp.user-detail"]?.userInfo?.user;
+      if (detailUser?.uniqueId) {
+        return {
+          username: String(detailUser.uniqueId),
+          secUid: String(detailUser.secUid || ""),
+        };
+      }
+      return null;
+    }
+
+    try {
+      const el = document.getElementById("__UNIVERSAL_DATA_FOR_REHYDRATION__");
+      if (el?.textContent) {
+        const data = JSON.parse(el.textContent);
+        const fromDom = pick(data?.__DEFAULT_SCOPE__);
+        if (fromDom?.username) return fromDom;
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const html = document.documentElement?.innerHTML || "";
+      const m = html.match(
+        /"uniqueId"\s*:\s*"([^"]{2,64})"[\s\S]{0,240}?"secUid"\s*:\s*"(MS4wLjABAAAA[^"]+)"/,
+      );
+      if (m) return { username: m[1], secUid: m[2] };
+    } catch {
+      // ignore
+    }
+
+    const selectors = [
+      'a[data-e2e="nav-profile"]',
+      'a[data-e2e="bottom-nav-profile"]',
+      'a[href^="/@"][data-e2e*="profile"]',
+    ];
+    for (const sel of selectors) {
+      const a = document.querySelector(sel);
+      const href = a?.getAttribute?.("href") || "";
+      const m = href.match(/\/@([^/?#]+)/);
+      if (m?.[1] && m[1].toLowerCase() !== "undefined") {
+        return { username: decodeURIComponent(m[1]), secUid: "" };
+      }
+    }
+
+    // Own profile URL while viewing /@me
+    try {
+      const path = location.pathname || "";
+      const self = path.match(/^\/@([^/?#]+)\/?$/);
+      if (self?.[1] && !["foryou", "following", "friends", "live"].includes(self[1])) {
+        // Only trust if page looks like own profile (Edit profile button)
+        if (document.querySelector('[data-e2e="edit-profile-button"]')) {
+          return { username: decodeURIComponent(self[1]), secUid: "" };
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return null;
+  }
+
   function handleMessage(msg, _sender, sendResponse) {
     if (msg?.type === "RR_PING_CS") {
       sendResponse({
@@ -688,6 +761,79 @@
         modes: ["repost", "like", "favorite"],
         mode: activeMode,
       });
+      return true;
+    }
+    if (msg?.type === "GET_PAGE_USER") {
+      const hint = String(msg.uniqueId || "")
+        .replace(/^@/, "")
+        .trim();
+
+      const finish = (user) => {
+        sendResponse({
+          ok: Boolean(user?.username),
+          user: user || null,
+        });
+      };
+
+      let user = readLoggedInUserFromPage();
+      const username = hint || user?.username || "";
+
+      if (username && !user?.secUid) {
+        // Fetch profile in this tab's session to get secUid from viewport HTML
+        fetch(
+          `https://www.tiktok.com/@${encodeURIComponent(username)}?lang=en`,
+          {
+            credentials: "include",
+            redirect: "follow",
+            headers: {
+              accept:
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            },
+          },
+        )
+          .then((res) => (res.ok ? res.text() : ""))
+          .then((html) => {
+            if (!html) {
+              finish(user || (username ? { username, secUid: "" } : null));
+              return;
+            }
+            try {
+              const scriptMatch = html.match(
+                /<script[^>]*id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/,
+              );
+              if (scriptMatch?.[1]) {
+                const data = JSON.parse(scriptMatch[1]);
+                const scope = data?.__DEFAULT_SCOPE__;
+                const detail = scope?.["webapp.user-detail"]?.userInfo?.user;
+                const ctx = scope?.["webapp.app-context"]?.user;
+                const u = detail || ctx;
+                if (u?.uniqueId || u?.secUid) {
+                  finish({
+                    username: String(u.uniqueId || username),
+                    secUid: String(u.secUid || ""),
+                  });
+                  return;
+                }
+              }
+              const pair = html.match(
+                /"uniqueId"\s*:\s*"([^"]{2,64})"[\s\S]{0,240}?"secUid"\s*:\s*"(MS4wLjABAAAA[^"]+)"/,
+              );
+              if (pair) {
+                finish({ username: pair[1], secUid: pair[2] });
+                return;
+              }
+            } catch {
+              // ignore
+            }
+            finish(user || { username, secUid: "" });
+          })
+          .catch(() => {
+            finish(user || (username ? { username, secUid: "" } : null));
+          });
+        return true;
+      }
+
+      finish(user);
       return true;
     }
     if (msg?.type === "RR_STOP") {

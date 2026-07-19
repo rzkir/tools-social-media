@@ -3,6 +3,7 @@ import { TikTokProgressDialog } from "#/components/dialog/tiktok-progres.dialog"
 import { MinimizedProgressDock } from "#/components/MinimizedProgressDock";
 import { useMinimize } from "#/context/MinimizeContext";
 import { useNotificationOptional } from "#/context/NotificationContext";
+import { recordJobResult } from "#/services/storage.services";
 
 function canMinimize(status: string | undefined, running: boolean) {
 	// Keep dialog open when waiting for delete limit
@@ -47,6 +48,16 @@ export function ProgressHost() {
 				{ title: "Siap dihapus" },
 			);
 			return;
+		}
+		if (status === "done" || status === "stopped" || status === "error") {
+			recordJobResult({
+				mode: job.mode,
+				status,
+				removed: progress?.done ?? 0,
+				failed: progress?.failed ?? 0,
+				label: job.modeLabel,
+				error: extState.lastError,
+			});
 		}
 		if (status === "done") {
 			notify.success(

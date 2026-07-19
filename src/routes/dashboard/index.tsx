@@ -1,17 +1,21 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronDown, Mail } from "lucide-react";
+import { useMemo } from "react";
 import { DashboardAside } from "#/components/ui/aside";
 import {
 	FollowersLineChart,
 	GenderDonutChart,
 	SparklineChart,
 } from "#/components/ui/chart";
+import { getDashboardMetrics } from "#/services/storage.services";
 
 export const Route = createFileRoute("/dashboard/")({
 	component: DashboardPage,
 });
 
 function DashboardPage() {
+	const metrics = useMemo(() => getDashboardMetrics(), []);
+
 	return (
 		<div className="grid grid-cols-12 gap-8">
 			<div className="col-span-12 space-y-8 lg:col-span-8">
@@ -19,14 +23,14 @@ function DashboardPage() {
 					<div className="relative flex items-center gap-6 overflow-hidden rounded-[2.5rem] border border-orange-200/50 bg-orange-100/50 p-8">
 						<div className="relative z-10 flex-1">
 							<h3 className="mb-2 text-lg leading-tight font-bold text-slate-800">
-								Have you tried our mobile application?
+								Statistik tersimpan di browser (localStorage)
 							</h3>
-							<button
-								type="button"
-								className="rounded-full bg-white px-6 py-2.5 text-sm font-bold text-orange-600 shadow-sm transition-all hover:shadow-md"
+							<Link
+								to="/dashboard/analytics"
+								className="inline-flex rounded-full bg-white px-6 py-2.5 text-sm font-bold text-orange-600 shadow-sm transition-all hover:shadow-md"
 							>
-								Try Now
-							</button>
+								Lihat Analytics
+							</Link>
 						</div>
 						<div className="relative h-32 w-32 flex-shrink-0">
 							<img
@@ -45,14 +49,15 @@ function DashboardPage() {
 							<div className="h-2 w-2 rounded-full bg-white/40" />
 						</div>
 						<div>
-							<p className="mb-1 text-4xl font-extrabold">20.k</p>
-							<p className="font-medium text-white/80">Pending Messages</p>
+							<p className="mb-1 text-4xl font-extrabold">
+								{metrics.removed.toLocaleString("id-ID")}
+							</p>
+							<p className="font-medium text-white/80">Item berhasil dihapus</p>
 						</div>
-						<div className="mt-4 flex items-center gap-1">
-							<div className="h-1 w-1 rounded-full bg-white" />
-							<div className="h-1 w-1 rounded-full bg-white" />
-							<div className="h-1 w-1 rounded-full bg-white" />
-						</div>
+						<p className="mt-4 text-sm text-white/70">
+							Gagal {metrics.failed} · Job {metrics.jobs} · Rate{" "}
+							{metrics.successRate}%
+						</p>
 					</div>
 				</div>
 

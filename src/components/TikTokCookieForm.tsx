@@ -1,3 +1,5 @@
+import { Cookie } from "lucide-react";
+import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import {
 	Field,
@@ -7,6 +9,11 @@ import {
 	FieldLabel,
 } from "#/components/ui/field";
 import { Input } from "#/components/ui/input";
+import {
+	fetchTikTokCookies,
+	hasExtensionMarker,
+	pingExtension,
+} from "#/lib/extension-bridge";
 import type { TikTokUser } from "#/types/tiktok";
 
 export type TikTokCookieValues = {
@@ -135,12 +142,14 @@ export function TikTokCookieForm({
 	variant = "card",
 	verifyLabel = "Verifikasi & Connect",
 }: TikTokCookieFormProps) {
-	const disabled = busy === "remove";
+	const [autofilling, setAutofilling] = useState(false);
+	const [autofillHint, setAutofillHint] = useState<string | null>(null);
+	const disabled = busy === "remove" || autofilling;
 	const canVerify =
 		Boolean(values.sessionid.trim()) &&
 		Boolean(values.msToken.trim()) &&
-		Boolean(values.username.trim() || values.secUid.trim()) &&
-		busy === "idle";
+		busy === "idle" &&
+		!autofilling;
 	const hasAnyValue =
 		Boolean(values.sessionid.trim()) ||
 		Boolean(values.msToken.trim()) ||
@@ -154,6 +163,63 @@ export function TikTokCookieForm({
 		onChange({ ...values, [key]: value });
 	};
 
+	const onAutofill = async () => {
+		setAutofillHint(null);
+		setAutofilling(true);
+		try {
+			const installed = hasExtensionMarker() || (await pingExtension());
+			if (!installed) {
+				setAutofillHint(
+					"Ekstensi Chrome belum terdeteksi. Pasang & aktifkan ekstensi Remove TikTok, lalu hard refresh (Ctrl+Shift+R).",
+				);
+				return;
+			}
+
+			const result = await fetchTikTokCookies({
+				uniqueId: values.username.trim() || undefined,
+			});
+			if (!result.ok || !result.values) {
+				setAutofillHint(
+					result.error ||
+						"Gagal mengambil cookie. Login di tiktok.com dulu, lalu coba lagi.",
+				);
+				return;
+			}
+
+			const next: TikTokCookieValues = {
+				...values,
+				sessionid: result.values.sessionid || values.sessionid,
+				tt_csrf_token: result.values.tt_csrf_token || values.tt_csrf_token,
+				msToken: result.values.msToken || values.msToken,
+				ttwid: result.values.ttwid || values.ttwid,
+				s_v_web_id: result.values.s_v_web_id || values.s_v_web_id,
+				username: result.values.username || values.username,
+				secUid: result.values.secUid || values.secUid,
+			};
+			onChange(next);
+
+			if (result.warning) {
+				setAutofillHint(result.warning);
+			} else if (!next.secUid.trim()) {
+				setAutofillHint(
+					"Cookie terisi. Buka profil TikTok kamu (tiktok.com/@username) di tab lain, lalu Ambil lagi agar secUid ikut terisi.",
+				);
+			} else {
+				setAutofillHint(
+					"Cookie + username + secUid berhasil diambil dari viewport TikTok. Klik Verifikasi & Connect.",
+				);
+			}
+		} catch (err) {
+			setAutofillHint(
+				err instanceof Error
+					? err.message
+					: "Gagal mengambil cookie dari ekstensi.",
+			);
+		} finally {
+			setAutofilling(false);
+		}
+	};
+
 	const body = (
 		<>
 			{variant === "card" ? (
@@ -165,18 +231,52 @@ export function TikTokCookieForm({
 						Cookie TikTok
 					</h2>
 					<p className="mt-1 text-sm text-slate-400">
-						Isi per-field. Minimal{" "}
+						Klik <strong className="font-medium text-slate-600">Ambil dari Browser</strong>{" "}
+						untuk isi otomatis (butuh ekstensi + login di tiktok.com), atau isi
+						manual. Minimal{" "}
 						<code className="text-indigo-600">username</code> +{" "}
 						<code className="text-indigo-600">sessionid</code> +{" "}
-						<code className="text-indigo-600">msToken</code>. Disimpan di
-						sessionStorage sampai tab ditutup. Jangan spam verifikasi.
+						<code className="text-indigo-600">msToken</code>.
 					</p>
 				</div>
-			) : null}
+			) : (
+				<p className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
+					<strong>1.</strong> Buka profil TikTok kamu di tab lain:{" "}
+					<code className="text-indigo-700">tiktok.com/@username</code> (sudah
+					login). <strong>2.</strong> Kembali ke sini → isi username jika perlu →{" "}
+					<strong>Ambil dari Browser</strong>. Cookie +{" "}
+					<code className="text-indigo-700">secUid</code> diambil dari viewport
+					tab itu.
+				</p>
+			)}
 
 			<FieldGroup>
+				<div className="flex flex-wrap items-center gap-2 pb-1">
+					<Button
+						type="button"
+						variant="outline"
+						onClick={onAutofill}
+						disabled={disabled || busy !== "idle"}
+						size="lg"
+					>
+						<Cookie className="h-4 w-4" />
+						{autofilling ? "Mengambil cookie…" : "Ambil dari Browser"}
+					</Button>
+					{autofillHint ? (
+						<p
+							className={`m-0 text-sm ${
+								autofillHint.includes("berhasil diambil")
+									? "text-emerald-700"
+									: "text-amber-800"
+							}`}
+						>
+							{autofillHint}
+						</p>
+					) : null}
+				</div>
+
 				<Field>
-					<FieldLabel htmlFor="cookie-username" required>
+					<FieldLabel htmlFor="cookie-username">
 						username
 					</FieldLabel>
 					<Input
@@ -191,8 +291,8 @@ export function TikTokCookieForm({
 						className="font-sans"
 					/>
 					<FieldDescription>
-						Wajib saat kena rate-limit. Verifikasi lewat halaman profil, bukan
-						API /user/detail.
+						Disarankan. Auto-fill mengisi dari tab tiktok.com / homepage.
+						Kalau kosong, Verifikasi tetap bisa deteksi dari cookie.
 					</FieldDescription>
 				</Field>
 
@@ -249,7 +349,7 @@ export function TikTokCookieForm({
 						<Button
 							variant="outline"
 							onClick={onClearSession}
-							disabled={busy !== "idle"}
+							disabled={busy !== "idle" || autofilling}
 						>
 							Hapus Session
 						</Button>

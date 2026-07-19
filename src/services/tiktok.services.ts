@@ -469,6 +469,21 @@ export async function getSelfUser(
 	const hint = uniqueIdHint?.trim().replace(/^@/, "");
 	const secUid = secUidHint?.trim();
 
+	// Extension/viewport already gave secUid — trust it (avoids Worker rate-limit on HTML/API)
+	if (secUid && hint) {
+		try {
+			const fromProfile = await getUserFromProfileHtml(cookieHeader, hint);
+			if (fromProfile?.secUid) return fromProfile;
+		} catch {
+			// ignore rate-limit / empty HTML
+		}
+		return {
+			secUid,
+			uniqueId: hint,
+			nickname: hint,
+		};
+	}
+
 	// Prefer profile HTML when username known — yields real secUid for repost list
 	if (hint) {
 		const fromProfile = await getUserFromProfileHtml(cookieHeader, hint);
@@ -483,14 +498,6 @@ export async function getSelfUser(
 		}
 	}
 
-	// Manual secUid only as fallback (e.g. rate-limit blocked HTML)
-	if (secUid && hint) {
-		return {
-			secUid,
-			uniqueId: hint,
-			nickname: hint,
-		};
-	}
 	if (secUid) {
 		return {
 			secUid,
@@ -508,7 +515,7 @@ export async function getSelfUser(
 				throw err;
 			}
 			throw new TikTokServiceError(
-				`Tidak bisa membaca profil @${hint}. Isi field secUid manual (dari Network tab / page source), atau tunggu rate-limit reda lalu coba lagi.`,
+				`Tidak bisa membaca profil @${hint}. Buka tab tiktok.com/@${hint}, klik Ambil dari Browser agar secUid terisi, atau isi secUid manual.`,
 			);
 		}
 	}
