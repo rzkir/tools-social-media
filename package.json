@@ -6,9 +6,10 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "vite dev --port 3000",
+    "sync:extension": "node scripts/sync-extension-config.mjs",
+    "dev": "node scripts/sync-extension-config.mjs && vite dev --port 3000",
     "generate-routes": "tsr generate",
-    "build": "vite build",
+    "build": "node scripts/sync-extension-config.mjs && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "format": "biome format",

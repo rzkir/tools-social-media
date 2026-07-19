@@ -1,0 +1,1 @@
+const PUBLIC_URL = "https://socialtools.rizkiramadhan.biz.id";

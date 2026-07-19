@@ -12,7 +12,7 @@ Kontrol hapus repost dari **dashboard**, sementara request API jalan di tab TikT
    `C:\Users\Administrator\Desktop\remove-repost-tiktok\extension`
 
    Jangan pilih folder project (`remove-repost-tiktok`) atau `public`.
-5. Hard refresh dashboard (`Ctrl+Shift+R`) di `http://localhost:3000/dashboard/tiktok`
+5. Hard refresh dashboard (`Ctrl+Shift+R`) di `$PUBLIC_URL/dashboard/tiktok` (lihat `.env.local`)
 6. Status harus **Connected**, lalu **Start Hapus Repost**
 
 Kalau sudah pernah load versi lama: di `chrome://extensions` klik **Remove**, lalu Load unpacked lagi (versi 1.0.2).

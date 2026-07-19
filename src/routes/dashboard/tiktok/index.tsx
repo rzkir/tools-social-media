@@ -5,6 +5,7 @@ import {
 	Music2,
 	Repeat2,
 	Shield,
+	ThumbsUp,
 	UserRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -64,8 +65,10 @@ function TikTokOverviewPage() {
 				</div>
 				<div className="rounded-[1.75rem] border border-slate-100 bg-white p-5 shadow-sm">
 					<p className="mb-1 text-xs font-semibold text-slate-400">Tools</p>
-					<p className="m-0 text-2xl font-extrabold text-slate-900">2</p>
-					<p className="mt-1 text-xs text-slate-400">Repost · Favorite</p>
+					<p className="m-0 text-2xl font-extrabold text-slate-900">3</p>
+					<p className="mt-1 text-xs text-slate-400">
+						Repost · Disukai · Favorite
+					</p>
 				</div>
 				<div className="rounded-[1.75rem] border border-slate-100 bg-white p-5 shadow-sm">
 					<p className="mb-1 text-xs font-semibold text-slate-400">Status</p>
@@ -99,9 +102,9 @@ function TikTokOverviewPage() {
 					/>
 					<ProgressMetric
 						value="—"
-						label="Favorite dibersihkan"
+						label="Like dibersihkan"
 						percent={0}
-						icon={<Heart className="h-3.5 w-3.5" />}
+						icon={<ThumbsUp className="h-3.5 w-3.5" />}
 					/>
 					<ProgressMetric
 						value={extOk ? "OK" : "—"}
@@ -112,7 +115,7 @@ function TikTokOverviewPage() {
 				</div>
 			</section>
 
-			<section className="grid gap-4 md:grid-cols-2">
+			<section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 				<Link
 					to="/dashboard/tiktok/repost"
 					className="group rounded-[2rem] border border-slate-100 bg-white p-6 no-underline shadow-sm transition hover:border-indigo-200 hover:shadow-md"
@@ -125,6 +128,30 @@ function TikTokOverviewPage() {
 					</h3>
 					<p className="mt-1 mb-0 text-sm text-slate-400">
 						Hapus repost dari dashboard lewat ekstensi Chrome.
+					</p>
+					<span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-indigo-600">
+						{hasAccount ? (
+							<>
+								<CheckCircle2 className="h-3.5 w-3.5" /> Buka tool
+							</>
+						) : (
+							"Setup akun dulu"
+						)}
+					</span>
+				</Link>
+
+				<Link
+					to="/dashboard/tiktok/like"
+					className="group rounded-[2rem] border border-slate-100 bg-white p-6 no-underline shadow-sm transition hover:border-indigo-200 hover:shadow-md"
+				>
+					<div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+						<ThumbsUp className="h-5 w-5" />
+					</div>
+					<h3 className="m-0 text-base font-bold text-slate-900 group-hover:text-indigo-600">
+						Hapus Disukai
+					</h3>
+					<p className="mt-1 mb-0 text-sm text-slate-400">
+						Hapus like (Disukai) dari dashboard lewat ekstensi Chrome.
 					</p>
 					<span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-indigo-600">
 						{hasAccount ? (

@@ -18,6 +18,7 @@ import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analy
 import { Route as DashboardAccountsRouteImport } from './routes/dashboard/accounts'
 import { Route as DashboardTiktokIndexRouteImport } from './routes/dashboard/tiktok/index'
 import { Route as DashboardTiktokRepostRouteImport } from './routes/dashboard/tiktok/repost'
+import { Route as DashboardTiktokLikeRouteImport } from './routes/dashboard/tiktok/like'
 import { Route as DashboardTiktokFavoriteRouteImport } from './routes/dashboard/tiktok/favorite'
 
 const AboutRoute = AboutRouteImport.update({
@@ -65,6 +66,11 @@ const DashboardTiktokRepostRoute = DashboardTiktokRepostRouteImport.update({
   path: '/repost',
   getParentRoute: () => DashboardTiktokRoute,
 } as any)
+const DashboardTiktokLikeRoute = DashboardTiktokLikeRouteImport.update({
+  id: '/like',
+  path: '/like',
+  getParentRoute: () => DashboardTiktokRoute,
+} as any)
 const DashboardTiktokFavoriteRoute = DashboardTiktokFavoriteRouteImport.update({
   id: '/favorite',
   path: '/favorite',
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/tiktok': typeof DashboardTiktokRouteWithChildren
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/tiktok/favorite': typeof DashboardTiktokFavoriteRoute
+  '/dashboard/tiktok/like': typeof DashboardTiktokLikeRoute
   '/dashboard/tiktok/repost': typeof DashboardTiktokRepostRoute
   '/dashboard/tiktok/': typeof DashboardTiktokIndexRoute
 }
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard': typeof DashboardIndexRoute
   '/dashboard/tiktok/favorite': typeof DashboardTiktokFavoriteRoute
+  '/dashboard/tiktok/like': typeof DashboardTiktokLikeRoute
   '/dashboard/tiktok/repost': typeof DashboardTiktokRepostRoute
   '/dashboard/tiktok': typeof DashboardTiktokIndexRoute
 }
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/dashboard/tiktok': typeof DashboardTiktokRouteWithChildren
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/tiktok/favorite': typeof DashboardTiktokFavoriteRoute
+  '/dashboard/tiktok/like': typeof DashboardTiktokLikeRoute
   '/dashboard/tiktok/repost': typeof DashboardTiktokRepostRoute
   '/dashboard/tiktok/': typeof DashboardTiktokIndexRoute
 }
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/dashboard/tiktok'
     | '/dashboard/'
     | '/dashboard/tiktok/favorite'
+    | '/dashboard/tiktok/like'
     | '/dashboard/tiktok/repost'
     | '/dashboard/tiktok/'
   fileRoutesByTo: FileRoutesByTo
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/dashboard/analytics'
     | '/dashboard'
     | '/dashboard/tiktok/favorite'
+    | '/dashboard/tiktok/like'
     | '/dashboard/tiktok/repost'
     | '/dashboard/tiktok'
   id:
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/dashboard/tiktok'
     | '/dashboard/'
     | '/dashboard/tiktok/favorite'
+    | '/dashboard/tiktok/like'
     | '/dashboard/tiktok/repost'
     | '/dashboard/tiktok/'
   fileRoutesById: FileRoutesById
@@ -214,6 +226,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardTiktokRepostRouteImport
       parentRoute: typeof DashboardTiktokRoute
     }
+    '/dashboard/tiktok/like': {
+      id: '/dashboard/tiktok/like'
+      path: '/like'
+      fullPath: '/dashboard/tiktok/like'
+      preLoaderRoute: typeof DashboardTiktokLikeRouteImport
+      parentRoute: typeof DashboardTiktokRoute
+    }
     '/dashboard/tiktok/favorite': {
       id: '/dashboard/tiktok/favorite'
       path: '/favorite'
@@ -226,12 +245,14 @@ declare module '@tanstack/react-router' {
 
 interface DashboardTiktokRouteChildren {
   DashboardTiktokFavoriteRoute: typeof DashboardTiktokFavoriteRoute
+  DashboardTiktokLikeRoute: typeof DashboardTiktokLikeRoute
   DashboardTiktokRepostRoute: typeof DashboardTiktokRepostRoute
   DashboardTiktokIndexRoute: typeof DashboardTiktokIndexRoute
 }
 
 const DashboardTiktokRouteChildren: DashboardTiktokRouteChildren = {
   DashboardTiktokFavoriteRoute: DashboardTiktokFavoriteRoute,
+  DashboardTiktokLikeRoute: DashboardTiktokLikeRoute,
   DashboardTiktokRepostRoute: DashboardTiktokRepostRoute,
   DashboardTiktokIndexRoute: DashboardTiktokIndexRoute,
 }

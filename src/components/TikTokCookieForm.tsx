@@ -261,6 +261,7 @@ export function TikTokCookieForm({
 								<img
 									src={user.avatarUrl}
 									alt=""
+									referrerPolicy="no-referrer"
 									className="h-8 w-8 rounded-full object-cover"
 								/>
 							) : null}

@@ -6,10 +6,23 @@ import type { TikTokUser } from "#/types/tiktok";
 
 const STORAGE_KEY = "tt_repost_cookie_session";
 
+export type AccountPlatform = "tiktok" | "instagram";
+export type AccountBridge = "cookie" | "browser";
+
 export type StoredCookieSession = {
 	cookies: TikTokCookieValues;
 	user: TikTokUser | null;
+	platform: AccountPlatform;
+	bridge: AccountBridge;
 };
+
+function parsePlatform(value: unknown): AccountPlatform {
+	return value === "instagram" ? "instagram" : "tiktok";
+}
+
+function parseBridge(value: unknown): AccountBridge {
+	return value === "browser" ? "browser" : "cookie";
+}
 
 function parseUser(value: unknown): TikTokUser | null {
 	if (!value || typeof value !== "object") return null;
@@ -49,14 +62,15 @@ export function loadCookieSession(): StoredCookieSession | null {
 		const parsed = JSON.parse(raw) as Partial<StoredCookieSession>;
 		const cookies = parseCookies(parsed.cookies);
 		const user = parseUser(parsed.user);
+		const platform = parsePlatform(parsed.platform);
+		const bridge = parseBridge(parsed.bridge);
 
-		// Fill username/secUid from user if cookies incomplete
 		if (user?.uniqueId && !cookies.username) cookies.username = user.uniqueId;
 		if (user?.secUid && !cookies.secUid) cookies.secUid = user.secUid;
 
 		if (!cookies.username && !user) return null;
 
-		return { cookies, user };
+		return { cookies, user, platform, bridge };
 	} catch {
 		return null;
 	}
@@ -65,10 +79,17 @@ export function loadCookieSession(): StoredCookieSession | null {
 export function saveCookieSession(
 	cookies: TikTokCookieValues,
 	user: TikTokUser | null,
+	meta?: { platform?: AccountPlatform; bridge?: AccountBridge },
 ): void {
 	if (typeof sessionStorage === "undefined") return;
 	try {
-		const payload: StoredCookieSession = { cookies, user };
+		const existing = loadCookieSession();
+		const payload: StoredCookieSession = {
+			cookies,
+			user,
+			platform: meta?.platform ?? existing?.platform ?? "tiktok",
+			bridge: meta?.bridge ?? existing?.bridge ?? "cookie",
+		};
 		sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 	} catch {
 		// ignore quota / private mode
@@ -92,4 +113,14 @@ export function hasSavedAccount(
 	const username =
 		session.cookies.username?.trim() || session.user?.uniqueId?.trim() || "";
 	return Boolean(username);
+}
+
+export function bridgeLabel(
+	platform: AccountPlatform,
+	bridge: AccountBridge,
+): string {
+	if (platform === "instagram") {
+		return bridge === "browser" ? "Script Instagram" : "Cookie Instagram";
+	}
+	return bridge === "browser" ? "Script Browser" : "Cookie TikTok";
 }

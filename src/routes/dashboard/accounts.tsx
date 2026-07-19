@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import { AccountsDialog } from "#/components/dialog/accounts.dialog";
 import { AccountCard } from "#/components/ui/card";
 import { Empty } from "#/components/ui/empaty";
-import { clearCookieSession, loadCookieSession } from "#/lib/session-store";
+import {
+	type AccountBridge,
+	type AccountPlatform,
+	bridgeLabel,
+	clearCookieSession,
+	loadCookieSession,
+} from "#/lib/session-store";
 import type { TikTokUser } from "#/types/tiktok";
 
 export const Route = createFileRoute("/dashboard/accounts")({
@@ -14,18 +20,27 @@ export const Route = createFileRoute("/dashboard/accounts")({
 function AccountsPage() {
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [user, setUser] = useState<TikTokUser | null>(null);
+	const [platform, setPlatform] = useState<AccountPlatform>("tiktok");
+	const [bridge, setBridge] = useState<AccountBridge>("cookie");
 
 	useEffect(() => {
 		const stored = loadCookieSession();
-		if (stored?.user) setUser(stored.user);
+		if (stored?.user) {
+			setUser(stored.user);
+			setPlatform(stored.platform);
+			setBridge(stored.bridge);
+		}
 	}, []);
 
 	const onClearSession = () => {
 		clearCookieSession();
 		setUser(null);
+		setPlatform("tiktok");
+		setBridge("cookie");
 	};
 
 	const connectedCount = user ? 1 : 0;
+	const label = bridgeLabel(platform, bridge);
 
 	return (
 		<>
@@ -37,8 +52,8 @@ function AccountsPage() {
 						</h2>
 						<p className="text-sm text-slate-400">
 							{connectedCount > 0
-								? `You have ${connectedCount} account connected · TikTok ready`
-								: "No accounts yet · connect TikTok to unlock tools"}
+								? `You have ${connectedCount} account connected · ${label}`
+								: "No accounts yet · connect TikTok or Instagram cookies"}
 						</p>
 					</div>
 					<button
@@ -54,26 +69,32 @@ function AccountsPage() {
 				{user ? (
 					<div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
 						<AccountCard
-							platform="tiktok"
+							platform={platform}
 							name={user.nickname || user.uniqueId}
 							handle={`@${user.uniqueId}`}
 							avatarUrl={user.avatarUrl}
 							status="active"
 							syncedLabel="Connected"
+							bridgeLabel={label}
 							onRefresh={() => setDialogOpen(true)}
 							onSettings={onClearSession}
 							metrics={[
 								{ label: "User ID", value: user.uniqueId },
 								{
 									label: "Tool",
-									value: (
-										<Link
-											to="/dashboard/tiktok/repost"
-											className="text-sm font-bold text-indigo-600 no-underline hover:underline"
-										>
-											Open Remove Repost
-										</Link>
-									),
+									value:
+										platform === "tiktok" ? (
+											<Link
+												to="/dashboard/tiktok/repost"
+												className="text-sm font-bold text-indigo-600 no-underline hover:underline"
+											>
+												Open Remove Repost
+											</Link>
+										) : (
+											<span className="text-sm font-bold text-slate-400">
+												IG soon
+											</span>
+										),
 								},
 							]}
 						/>
@@ -81,7 +102,7 @@ function AccountsPage() {
 				) : (
 					<Empty
 						title="No accounts connected"
-						description="Connect TikTok to use remove-repost tools"
+						description="Connect via Cookie TikTok or Cookie Instagram"
 						actionLabel="Add New Account"
 						onAction={() => setDialogOpen(true)}
 						className="max-w-md"
@@ -92,7 +113,11 @@ function AccountsPage() {
 			<AccountsDialog
 				open={dialogOpen}
 				onOpenChange={setDialogOpen}
-				onConnected={setUser}
+				onConnected={(payload) => {
+					setUser(payload.user);
+					setPlatform(payload.platform);
+					setBridge(payload.bridge);
+				}}
 			/>
 		</>
 	);

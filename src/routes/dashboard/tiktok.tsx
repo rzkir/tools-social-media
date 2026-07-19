@@ -4,7 +4,7 @@ import {
 	Outlet,
 	useRouterState,
 } from "@tanstack/react-router";
-import { Heart, LayoutDashboard, Repeat2 } from "lucide-react";
+import { Heart, LayoutDashboard, Repeat2, ThumbsUp } from "lucide-react";
 import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/dashboard/tiktok")({
@@ -22,6 +22,12 @@ const TABS = [
 		to: "/dashboard/tiktok/repost",
 		label: "Remove Repost",
 		icon: Repeat2,
+		exact: false,
+	},
+	{
+		to: "/dashboard/tiktok/like",
+		label: "Disukai",
+		icon: ThumbsUp,
 		exact: false,
 	},
 	{

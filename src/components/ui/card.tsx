@@ -1,5 +1,7 @@
 import { Clock, RefreshCw, Settings } from "lucide-react";
 import type { ReactNode } from "react";
+import { Avatar } from "#/components/ui/avatar";
+import { Badge } from "#/components/ui/badge";
 import { cn } from "#/lib/utils";
 
 export type AccountPlatform = "facebook" | "instagram" | "twitter" | "tiktok";
@@ -20,6 +22,7 @@ export type AccountCardProps = {
 	status?: AccountStatus;
 	metrics?: AccountMetric[];
 	syncedLabel?: string;
+	bridgeLabel?: string;
 	onRefresh?: () => void;
 	onSettings?: () => void;
 	className?: string;
@@ -56,7 +59,7 @@ export function PlatformMark({
 		facebook: "bg-blue-50 text-[#1877F2]",
 		instagram: "bg-pink-50 text-[#E4405F]",
 		twitter: "bg-blue-50 text-[#1DA1F2]",
-		tiktok: "bg-slate-100 text-slate-900",
+		tiktok: "bg-slate-900 text-white",
 	} as const;
 
 	const label = {
@@ -82,17 +85,16 @@ export function PlatformMark({
 function StatusBadge({ status }: { status: AccountStatus }) {
 	if (status === "active") {
 		return (
-			<div className="flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-1 text-[10px] font-bold text-green-600">
-				<span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+			<Badge variant="success" dot>
 				Active
-			</div>
+			</Badge>
 		);
 	}
 
 	return (
-		<div className="flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-1 text-[10px] font-bold text-orange-600">
+		<Badge variant="warning" dot>
 			Reconnect
-		</div>
+		</Badge>
 	);
 }
 
@@ -104,27 +106,38 @@ export function AccountCard({
 	status = "active",
 	metrics = [],
 	syncedLabel = "Connected",
+	bridgeLabel,
 	onRefresh,
 	onSettings,
 	className,
 	footerExtra,
 }: AccountCardProps) {
+	const bridgeVariant =
+		platform === "instagram"
+			? "instagram"
+			: platform === "tiktok"
+				? "tiktok"
+				: "neutral";
+
 	return (
 		<Card className={className}>
-			<div className="mb-6 flex items-center justify-between">
-				<div className="flex items-center gap-3">
-					{avatarUrl ? (
-						<img
-							src={avatarUrl}
-							alt=""
-							className="h-12 w-12 rounded-2xl object-cover"
+			<div className="mb-6 flex items-center justify-between gap-3">
+				<div className="flex min-w-0 items-center gap-3">
+					<div className="relative shrink-0">
+						<Avatar src={avatarUrl} fallback={name || handle} alt={name} />
+						<PlatformMark
+							platform={platform}
+							className="absolute -right-1 -bottom-1 h-6 w-6 rounded-lg text-[9px] ring-2 ring-white"
 						/>
-					) : (
-						<PlatformMark platform={platform} />
-					)}
-					<div>
-						<h4 className="font-bold text-slate-800">{name}</h4>
-						<p className="text-xs text-slate-400">{handle}</p>
+					</div>
+					<div className="min-w-0">
+						<h4 className="truncate font-bold text-slate-800">{name}</h4>
+						<p className="truncate text-xs text-slate-400">{handle}</p>
+						{bridgeLabel ? (
+							<div className="mt-1.5">
+								<Badge variant={bridgeVariant}>{bridgeLabel}</Badge>
+							</div>
+						) : null}
 					</div>
 				</div>
 				<StatusBadge status={status} />

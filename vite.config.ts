@@ -8,6 +8,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { cloudflare } from '@cloudflare/vite-plugin'
 
 const config = defineConfig({
+  envPrefix: ['VITE_', 'PUBLIC_'],
   resolve: { tsconfigPaths: true },
   plugins: [
     devtools(),

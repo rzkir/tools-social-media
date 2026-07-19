@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { BrowserScriptPanel } from "#/components/BrowserScriptPanel";
+import { TikTokProgressDialog } from "#/components/dialog/tiktok-progres.dialog";
 import {
 	EMPTY_COOKIE_VALUES,
 	type TikTokCookieValues,
@@ -24,7 +25,7 @@ import {
 } from "#/lib/session-store";
 import type { TikTokUser } from "#/types/tiktok";
 
-export type RemoveToolMode = "repost" | "favorite";
+export type RemoveToolMode = "repost" | "favorite" | "like";
 
 type SpeedMode = "fast" | "normal" | "safe";
 
@@ -70,7 +71,29 @@ const COPY: Record<
 			"Siap. Klik Start — ekstensi membuka tab TikTok lalu hapus favorite otomatis.",
 		listingWord: "favorite",
 	},
+	like: {
+		eyebrow: "Remove likes",
+		title: "Hapus Disukai",
+		readyHint:
+			"Akun tersimpan — tinggal Start. Hapus like (Disukai) di tab TikTok yang sudah login.",
+		setupHint:
+			"Hubungkan akun sekali, lalu Start dari sini lewat ekstensi Chrome.",
+		startLabel: "Start Hapus Disukai",
+		idleHint:
+			"Siap. Klik Start — ekstensi membuka tab TikTok lalu hapus like otomatis.",
+		listingWord: "like",
+	},
 };
+
+function isActiveStatus(status: string | undefined) {
+	return Boolean(
+		status &&
+			status !== "idle" &&
+			status !== "done" &&
+			status !== "stopped" &&
+			status !== "error",
+	);
+}
 
 export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	const copy = COPY[mode];
@@ -85,6 +108,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	const [error, setError] = useState<string | null>(null);
 	const [showFallback, setShowFallback] = useState(false);
 	const [editAccount, setEditAccount] = useState(false);
+	const [progressOpen, setProgressOpen] = useState(false);
 
 	useEffect(() => {
 		markExtensionHost();
@@ -134,15 +158,24 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	const secUid = cookieValues.secUid || user?.secUid || "";
 	const displayName = user?.nickname || username;
 	const hasAccount = Boolean(username.trim());
-	const thisJobRunning =
-		Boolean(extState?.running) && (!extState?.mode || extState.mode === mode);
-	const progress = extState?.progress;
-	const pct =
-		progress && progress.total > 0
-			? Math.round(((progress.done + progress.failed) / progress.total) * 100)
-			: progress?.listed
-				? Math.min(99, Math.round((progress.page / 50) * 100))
-				: 0;
+	const matchesMode = !extState?.mode || extState.mode === mode;
+	const thisJobRunning = Boolean(extState?.running) && matchesMode;
+	const hasProgressForMode =
+		Boolean(extState) &&
+		matchesMode &&
+		extState!.status !== "idle" &&
+		(thisJobRunning ||
+			isActiveStatus(extState?.status) ||
+			extState?.status === "done" ||
+			extState?.status === "stopped" ||
+			extState?.status === "error");
+
+	useEffect(() => {
+		if (!matchesMode) return;
+		if (thisJobRunning || isActiveStatus(extState?.status)) {
+			setProgressOpen(true);
+		}
+	}, [thisJobRunning, extState?.status, matchesMode]);
 
 	const onStart = async () => {
 		setError(null);
@@ -154,6 +187,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 		}
 		persist({ ...cookieValues, username: handle });
 		setEditAccount(false);
+		setProgressOpen(true);
 		const result = await startExtensionJob({
 			uniqueId: handle,
 			secUid: secUid.trim() || undefined,
@@ -395,17 +429,35 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 							</div>
 
 							{thisJobRunning ? (
-								<Button variant="danger" onClick={() => void onStop()}>
-									Stop
-								</Button>
+								<>
+									<Button variant="danger" onClick={() => void onStop()}>
+										Stop
+									</Button>
+									<Button
+										variant="secondary"
+										onClick={() => setProgressOpen(true)}
+									>
+										Lihat Progress
+									</Button>
+								</>
 							) : (
-								<Button
-									onClick={() => void onStart()}
-									size="lg"
-									disabled={!hasAccount}
-								>
-									{copy.startLabel}
-								</Button>
+								<>
+									<Button
+										onClick={() => void onStart()}
+										size="lg"
+										disabled={!hasAccount}
+									>
+										{copy.startLabel}
+									</Button>
+									{hasProgressForMode ? (
+										<Button
+											variant="secondary"
+											onClick={() => setProgressOpen(true)}
+										>
+											Lihat Progress
+										</Button>
+									) : null}
+								</>
 							)}
 						</Field>
 
@@ -415,30 +467,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 							</p>
 						) : null}
 
-						{extState &&
-						extState.status !== "idle" &&
-						(!extState.mode || extState.mode === mode) ? (
-							<div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-								<p className="m-0 text-sm font-semibold text-slate-800">
-									Status: {extState.status}
-									{extState.lastError ? ` — ${extState.lastError}` : ""}
-								</p>
-								<p className="mt-1 mb-2 text-xs text-slate-500">
-									{extState.status === "listing"
-										? `Memuat halaman ${progress?.page ?? 0} · ${progress?.listed ?? 0} ${copy.listingWord}`
-										: `OK ${progress?.done ?? 0} · Gagal ${progress?.failed ?? 0} · Total ${progress?.total ?? 0}`}
-								</p>
-								{(extState.status === "removing" ||
-									extState.status === "listing") && (
-									<div className="h-2 overflow-hidden rounded-full bg-slate-200">
-										<div
-											className="h-full rounded-full bg-indigo-600 transition-all"
-											style={{ width: `${pct}%` }}
-										/>
-									</div>
-								)}
-							</div>
-						) : hasAccount ? (
+						{hasAccount && !thisJobRunning ? (
 							<p className="m-0 text-sm text-slate-400">{copy.idleHint}</p>
 						) : null}
 
@@ -497,6 +526,16 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 					/>
 				</section>
 			) : null}
+
+			<TikTokProgressDialog
+				open={progressOpen && matchesMode}
+				onOpenChange={setProgressOpen}
+				modeLabel={copy.title}
+				listingWord={copy.listingWord}
+				extState={matchesMode ? extState : null}
+				running={thisJobRunning}
+				onStop={() => void onStop()}
+			/>
 		</div>
 	);
 }

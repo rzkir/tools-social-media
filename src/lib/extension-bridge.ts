@@ -229,7 +229,7 @@ export async function startExtensionJob(options: {
 	uniqueId: string;
 	secUid?: string;
 	delayMs: number;
-	mode?: "repost" | "favorite";
+	mode?: "repost" | "favorite" | "like";
 }): Promise<{ ok: boolean; error?: string }> {
 	const res = (await sendToExtension({
 		type: "START",
