@@ -252,7 +252,7 @@ export function TikTokProgressDialog({
 			onOpenChange={onOpenChange}
 			title={modeLabel}
 			description={copy.title}
-			className="max-w-md"
+			className="max-w-xl"
 			onMinimize={onMinimize}
 		>
 			<div className="space-y-5">

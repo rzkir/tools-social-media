@@ -14,6 +14,12 @@ function headerCopyFromPath(pathname: string): {
 	title: string;
 	subtitle: string;
 } {
+	if (pathname.startsWith("/dashboard/analytics")) {
+		return {
+			title: "Analytics",
+			subtitle: "Statistik hapus & aktivitas lokal",
+		};
+	}
 	if (pathname.startsWith("/dashboard/accounts")) {
 		return {
 			title: "Accounts",
@@ -45,7 +51,7 @@ function headerCopyFromPath(pathname: string): {
 		};
 	}
 	return {
-		title: "Analytics",
+		title: "Dashboard",
 		subtitle: "welcome back!",
 	};
 }

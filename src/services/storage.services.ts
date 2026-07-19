@@ -5,6 +5,12 @@ import {
 } from "#/lib/storage";
 
 export const METRICS_STORAGE_KEY = "rr_dashboard_metrics_v1";
+export const METRICS_UPDATED_EVENT = "rr-metrics-updated";
+
+function notifyMetricsUpdated() {
+	if (typeof window === "undefined") return;
+	window.dispatchEvent(new Event(METRICS_UPDATED_EVENT));
+}
 
 export type JobMode = "repost" | "like" | "favorite";
 
@@ -26,6 +32,25 @@ export type MetricsEvent = {
 	mode?: JobMode;
 	removed?: number;
 	failed?: number;
+};
+
+/** Detail of a single removed (or failed) video/item. */
+export type MetricsItem = {
+	id: string;
+	at: number;
+	mode: JobMode;
+	ok: boolean;
+	/** Video / content id from TikTok */
+	itemId: string;
+	author: string;
+	nickname?: string;
+	/** Short label (nickname or author) */
+	title: string;
+	/** Caption / description */
+	description: string;
+	/** Cover / thumbnail URL */
+	picture?: string | null;
+	url?: string;
 };
 
 export type ModeBucket = {
@@ -60,7 +85,12 @@ export type MetricsSnapshot = {
 	byMode: Record<JobMode, ModeBucket>;
 	daily: DailyBucket[];
 	events: MetricsEvent[];
+	/** Recent removed items with title / picture / description */
+	items: MetricsItem[];
 };
+
+const MAX_ITEMS = 120;
+const MAX_EVENTS = 80;
 
 const EMPTY_MODE: ModeBucket = { removed: 0, failed: 0, jobs: 0 };
 
@@ -86,6 +116,7 @@ function emptySnapshot(): MetricsSnapshot {
 		},
 		daily: [],
 		events: [],
+		items: [],
 	};
 }
 
@@ -139,12 +170,90 @@ function pushEvent(
 		removed: event.removed,
 		failed: event.failed,
 	};
-	return [next, ...events].slice(0, 80);
+	return [next, ...events].slice(0, MAX_EVENTS);
+}
+
+export type MetricsItemInput = {
+	itemId?: string;
+	id?: string;
+	author?: string;
+	nickname?: string;
+	title?: string;
+	description?: string;
+	desc?: string;
+	picture?: string | null;
+	cover?: string | null;
+	url?: string;
+	ok: boolean;
+	at?: number;
+};
+
+function normalizeItemInput(
+	raw: MetricsItemInput,
+	mode: JobMode,
+	at: number,
+): MetricsItem | null {
+	const itemId = String(raw.itemId || raw.id || "").trim();
+	if (!itemId) return null;
+	const author = String(raw.author || "").trim().replace(/^@/, "") || "unknown";
+	const nickname =
+		typeof raw.nickname === "string" && raw.nickname.trim()
+			? raw.nickname.trim()
+			: undefined;
+	const description = String(raw.description ?? raw.desc ?? "").trim();
+	const title =
+		String(raw.title || "").trim() ||
+		nickname ||
+		(description ? description.slice(0, 80) : "") ||
+		`@${author}`;
+	const pictureRaw = raw.picture ?? raw.cover;
+	const picture =
+		typeof pictureRaw === "string" && pictureRaw.trim()
+			? pictureRaw.trim()
+			: null;
+	const url =
+		typeof raw.url === "string" && raw.url.trim()
+			? raw.url.trim()
+			: author && itemId
+				? `https://www.tiktok.com/@${author}/video/${itemId}`
+				: undefined;
+
+	return {
+		id: nextId(),
+		at: typeof raw.at === "number" ? raw.at : at,
+		mode,
+		ok: Boolean(raw.ok),
+		itemId,
+		author,
+		nickname,
+		title,
+		description,
+		picture,
+		url,
+	};
+}
+
+function pushItems(
+	items: MetricsItem[],
+	incoming: MetricsItem[],
+): MetricsItem[] {
+	if (!incoming.length) return items;
+	const seen = new Set<string>();
+	const merged: MetricsItem[] = [];
+	for (const it of [...incoming, ...items]) {
+		const key = `${it.mode}:${it.itemId}:${it.ok ? 1 : 0}:${it.at}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		merged.push(it);
+		if (merged.length >= MAX_ITEMS) break;
+	}
+	return merged;
 }
 
 function persist(snapshot: MetricsSnapshot): MetricsSnapshot {
 	const next = { ...snapshot, updatedAt: Date.now() };
 	storageSetJson(METRICS_STORAGE_KEY, next);
+	notifyMetricsUpdated();
 	return next;
 }
 
@@ -165,7 +274,10 @@ export function loadMetrics(): MetricsSnapshot {
 			favorite: { ...EMPTY_MODE, ...(raw.byMode?.favorite || {}) },
 		},
 		daily: Array.isArray(raw.daily) ? raw.daily.slice(-60) : [],
-		events: Array.isArray(raw.events) ? raw.events.slice(0, 80) : [],
+		events: Array.isArray(raw.events) ? raw.events.slice(0, MAX_EVENTS) : [],
+		items: Array.isArray(raw.items)
+			? (raw.items as MetricsItem[]).slice(0, MAX_ITEMS)
+			: [],
 	};
 }
 
@@ -181,6 +293,8 @@ export function recordJobResult(input: {
 	failed: number;
 	label?: string;
 	error?: string | null;
+	/** Item details collected during the job (title, picture, description, …) */
+	items?: MetricsItemInput[];
 }): MetricsSnapshot {
 	const snap = loadMetrics();
 	const mode = normalizeMode(input.mode);
@@ -188,6 +302,7 @@ export function recordJobResult(input: {
 	const failed = Math.max(0, Math.floor(Number(input.failed) || 0));
 	const date = todayKey();
 	const { list: daily, bucket } = ensureDaily(snap.daily, date);
+	const at = Date.now();
 
 	snap.totals.removed += removed;
 	snap.totals.failed += failed;
@@ -229,7 +344,15 @@ export function recordJobResult(input: {
 		mode,
 		removed,
 		failed,
+		at,
 	});
+
+	if (input.items?.length) {
+		const normalized = input.items
+			.map((it) => normalizeItemInput(it, mode, at))
+			.filter((it): it is MetricsItem => Boolean(it));
+		snap.items = pushItems(snap.items, normalized);
+	}
 
 	return persist(snap);
 }
@@ -301,6 +424,7 @@ export type DashboardMetricsView = {
 	byMode: Record<JobMode, ModeBucket>;
 	last7Days: DailyBucket[];
 	recentEvents: MetricsEvent[];
+	recentItems: MetricsItem[];
 	updatedAt: number;
 };
 
@@ -342,6 +466,36 @@ export function getDashboardMetrics(): DashboardMetricsView {
 		byMode: snap.byMode,
 		last7Days,
 		recentEvents: snap.events.slice(0, 20),
+		recentItems: snap.items.slice(0, 40),
 		updatedAt: snap.updatedAt,
+	};
+}
+
+/**
+ * Live dashboard metrics — refreshes on persist, focus, visibility, and storage.
+ * Use in React client components only.
+ */
+export function subscribeMetrics(onChange: () => void): () => void {
+	if (typeof window === "undefined") return () => {};
+
+	const onFocus = () => onChange();
+	const onVis = () => {
+		if (document.visibilityState === "visible") onChange();
+	};
+	const onStorage = (e: StorageEvent) => {
+		if (e.key === METRICS_STORAGE_KEY || e.key === null) onChange();
+	};
+	const onCustom = () => onChange();
+
+	window.addEventListener("focus", onFocus);
+	document.addEventListener("visibilitychange", onVis);
+	window.addEventListener("storage", onStorage);
+	window.addEventListener(METRICS_UPDATED_EVENT, onCustom);
+
+	return () => {
+		window.removeEventListener("focus", onFocus);
+		document.removeEventListener("visibilitychange", onVis);
+		window.removeEventListener("storage", onStorage);
+		window.removeEventListener(METRICS_UPDATED_EVENT, onCustom);
 	};
 }

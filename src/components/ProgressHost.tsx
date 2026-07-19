@@ -3,7 +3,10 @@ import { TikTokProgressDialog } from "#/components/dialog/tiktok-progres.dialog"
 import { MinimizedProgressDock } from "#/components/MinimizedProgressDock";
 import { useMinimize } from "#/context/MinimizeContext";
 import { useNotificationOptional } from "#/context/NotificationContext";
-import { recordJobResult } from "#/services/storage.services";
+import {
+	type MetricsItemInput,
+	recordJobResult,
+} from "#/services/storage.services";
 
 function canMinimize(status: string | undefined, running: boolean) {
 	// Keep dialog open when waiting for delete limit
@@ -32,6 +35,60 @@ export function ProgressHost() {
 	} = useMinimize();
 	const notify = useNotificationOptional();
 	const lastStatusRef = useRef<string | null>(null);
+	const lastCountsRef = useRef({ done: 0, failed: 0 });
+	const collectedItemsRef = useRef<MetricsItemInput[]>([]);
+
+	// Collect title / picture / description as each item is processed
+	useEffect(() => {
+		if (!job || !extState) return;
+		const status = extState.status;
+		const progress = extState.progress;
+		if (!progress) return;
+
+		if (status === "starting" || status === "ready" || status === "listing") {
+			lastCountsRef.current = { done: 0, failed: 0 };
+			collectedItemsRef.current = [];
+			return;
+		}
+
+		if (status !== "removing") return;
+
+		const done = progress.done ?? 0;
+		const failed = progress.failed ?? 0;
+		const prev = lastCountsRef.current;
+		const current = progress.current;
+
+		if (!current?.id) {
+			lastCountsRef.current = { done, failed };
+			return;
+		}
+
+		const okDelta = done - prev.done;
+		const failDelta = failed - prev.failed;
+
+		if (okDelta > 0 || failDelta > 0) {
+			const ok = okDelta > 0;
+			const already = collectedItemsRef.current.some(
+				(it) => it.itemId === current.id && it.ok === ok,
+			);
+			if (!already) {
+				collectedItemsRef.current.push({
+					itemId: current.id,
+					author: current.author,
+					nickname: current.nickname,
+					title: current.nickname || current.author,
+					description: current.desc || "",
+					desc: current.desc || "",
+					picture: current.cover ?? null,
+					cover: current.cover ?? null,
+					ok,
+					at: Date.now(),
+				});
+			}
+		}
+
+		lastCountsRef.current = { done, failed };
+	}, [job, extState]);
 
 	useEffect(() => {
 		if (!job || !extState || !notify) return;
@@ -57,7 +114,10 @@ export function ProgressHost() {
 				failed: progress?.failed ?? 0,
 				label: job.modeLabel,
 				error: extState.lastError,
+				items: collectedItemsRef.current,
 			});
+			collectedItemsRef.current = [];
+			lastCountsRef.current = { done: 0, failed: 0 };
 		}
 		if (status === "done") {
 			notify.success(
@@ -82,7 +142,11 @@ export function ProgressHost() {
 	}, [job, extState, notify]);
 
 	useEffect(() => {
-		if (!job) lastStatusRef.current = null;
+		if (!job) {
+			lastStatusRef.current = null;
+			lastCountsRef.current = { done: 0, failed: 0 };
+			collectedItemsRef.current = [];
+		}
 	}, [job]);
 
 	if (!job) {

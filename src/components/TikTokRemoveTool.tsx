@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { BrowserScriptPanel } from "#/components/BrowserScriptPanel";
+import { useAlertStatus } from "#/components/dialog/alert-status.dialog";
 import {
 	EMPTY_COOKIE_VALUES,
 	type TikTokCookieValues,
@@ -85,6 +86,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	const copy = COPY[mode];
 	const minimizeCtx = useMinimizeOptional();
 	const notify = useNotificationOptional();
+	const statusAlert = useAlertStatus();
 	const extInstalled = minimizeCtx?.extInstalled ?? false;
 	const running = minimizeCtx?.running ?? false;
 	const job = minimizeCtx?.job ?? null;
@@ -151,7 +153,22 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 				"Belum ada akun. Isi username atau hubungkan di Accounts.";
 			setError(msg);
 			notify?.warning(msg, { title: "Akun diperlukan" });
+			statusAlert.warning(
+				"Akun diperlukan",
+				"Isi username di bawah, atau hubungkan akun di halaman Accounts dulu.",
+			);
 			setEditAccount(true);
+			return;
+		}
+		if (!extensionOk) {
+			const msg =
+				"Ekstensi belum terpasang. Install dulu, lalu Cek Ulang.";
+			setError(msg);
+			notify?.warning(msg, { title: "Ekstensi" });
+			statusAlert.warning(
+				"Ekstensi diperlukan",
+				"Pasang ekstensi Chrome (Load unpacked → folder extension), lalu klik Cek Ulang.",
+			);
 			return;
 		}
 		persist({ ...cookieValues, username: handle });
@@ -171,10 +188,15 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 			const msg = result.error || "Gagal memulai.";
 			setError(msg);
 			notify?.error(msg, { title: "Gagal Start" });
+			statusAlert.error("Gagal Start", msg);
 		} else {
 			notify?.info(`Memuat daftar ${copy.listingWord}…`, {
 				title: copy.title,
 			});
+			statusAlert.info(
+				copy.title,
+				`Memuat daftar ${copy.listingWord}… Progress muncul di dialog. Atur jumlah lalu Hapus.`,
+			);
 		}
 	};
 
@@ -188,9 +210,17 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 				"Ekstensi belum terdeteksi. Ikuti langkah instal di bawah.";
 			setError(msg);
 			notify?.error(msg, { title: "Ekstensi" });
+			statusAlert.error(
+				"Ekstensi tidak ditemukan",
+				"Pastikan ekstensi sudah di-load di chrome://extensions, lalu hard refresh halaman ini.",
+			);
 		} else {
 			setError(null);
 			notify?.success("Ekstensi terhubung.", { title: "Ekstensi" });
+			statusAlert.success(
+				"Ekstensi terhubung",
+				"Siap Start dari dashboard. Pastikan tab TikTok sudah login.",
+			);
 		}
 	};
 
@@ -504,6 +534,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 				</section>
 			) : null}
 
+			{statusAlert.dialog}
 		</div>
 	);
 }

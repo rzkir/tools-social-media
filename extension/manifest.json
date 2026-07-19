@@ -13,11 +13,11 @@
   "host_permissions": [
     "https://www.tiktok.com/*",
     "https://*.tiktok.com/*",
-    "http://localhost:3000/*"
+    "https://socialtools.rizkiramadhan.biz.id/*"
   ],
   "externally_connectable": {
     "matches": [
-      "http://localhost:3000/*"
+      "https://socialtools.rizkiramadhan.biz.id/*"
     ]
   },
   "background": {
@@ -36,7 +36,7 @@
     },
     {
       "matches": [
-        "http://localhost:3000/*"
+        "https://socialtools.rizkiramadhan.biz.id/*"
       ],
       "js": [
         "content-bridge.js"

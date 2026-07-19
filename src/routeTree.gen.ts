@@ -9,25 +9,25 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
-import { Route as DashboardTiktokRouteImport } from './routes/dashboard/tiktok'
-import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
 import { Route as DashboardAccountsRouteImport } from './routes/dashboard/accounts'
+import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
+import { Route as DashboardTiktokRouteImport } from './routes/dashboard/tiktok'
 import { Route as DashboardTiktokIndexRouteImport } from './routes/dashboard/tiktok/index'
-import { Route as DashboardTiktokRepostRouteImport } from './routes/dashboard/tiktok/repost'
-import { Route as DashboardTiktokLikeRouteImport } from './routes/dashboard/tiktok/like'
 import { Route as DashboardTiktokFavoriteRouteImport } from './routes/dashboard/tiktok/favorite'
+import { Route as DashboardTiktokLikeRouteImport } from './routes/dashboard/tiktok/like'
+import { Route as DashboardTiktokRepostRouteImport } from './routes/dashboard/tiktok/repost'
 
-const DashboardRouteRoute = DashboardRouteRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRouteRoute = DashboardRouteRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardIndexRoute = DashboardIndexRouteImport.update({
@@ -35,9 +35,9 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
-const DashboardTiktokRoute = DashboardTiktokRouteImport.update({
-  id: '/tiktok',
-  path: '/tiktok',
+const DashboardAccountsRoute = DashboardAccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
 const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
@@ -45,9 +45,9 @@ const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
-const DashboardAccountsRoute = DashboardAccountsRouteImport.update({
-  id: '/accounts',
-  path: '/accounts',
+const DashboardTiktokRoute = DashboardTiktokRouteImport.update({
+  id: '/tiktok',
+  path: '/tiktok',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
 const DashboardTiktokIndexRoute = DashboardTiktokIndexRouteImport.update({
@@ -55,9 +55,9 @@ const DashboardTiktokIndexRoute = DashboardTiktokIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DashboardTiktokRoute,
 } as any)
-const DashboardTiktokRepostRoute = DashboardTiktokRepostRouteImport.update({
-  id: '/repost',
-  path: '/repost',
+const DashboardTiktokFavoriteRoute = DashboardTiktokFavoriteRouteImport.update({
+  id: '/favorite',
+  path: '/favorite',
   getParentRoute: () => DashboardTiktokRoute,
 } as any)
 const DashboardTiktokLikeRoute = DashboardTiktokLikeRouteImport.update({
@@ -65,9 +65,9 @@ const DashboardTiktokLikeRoute = DashboardTiktokLikeRouteImport.update({
   path: '/like',
   getParentRoute: () => DashboardTiktokRoute,
 } as any)
-const DashboardTiktokFavoriteRoute = DashboardTiktokFavoriteRouteImport.update({
-  id: '/favorite',
-  path: '/favorite',
+const DashboardTiktokRepostRoute = DashboardTiktokRepostRouteImport.update({
+  id: '/repost',
+  path: '/repost',
   getParentRoute: () => DashboardTiktokRoute,
 } as any)
 
@@ -150,18 +150,18 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard/': {
@@ -171,11 +171,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
-    '/dashboard/tiktok': {
-      id: '/dashboard/tiktok'
-      path: '/tiktok'
-      fullPath: '/dashboard/tiktok'
-      preLoaderRoute: typeof DashboardTiktokRouteImport
+    '/dashboard/accounts': {
+      id: '/dashboard/accounts'
+      path: '/accounts'
+      fullPath: '/dashboard/accounts'
+      preLoaderRoute: typeof DashboardAccountsRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/analytics': {
@@ -185,11 +185,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAnalyticsRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
-    '/dashboard/accounts': {
-      id: '/dashboard/accounts'
-      path: '/accounts'
-      fullPath: '/dashboard/accounts'
-      preLoaderRoute: typeof DashboardAccountsRouteImport
+    '/dashboard/tiktok': {
+      id: '/dashboard/tiktok'
+      path: '/tiktok'
+      fullPath: '/dashboard/tiktok'
+      preLoaderRoute: typeof DashboardTiktokRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/tiktok/': {
@@ -199,11 +199,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardTiktokIndexRouteImport
       parentRoute: typeof DashboardTiktokRoute
     }
-    '/dashboard/tiktok/repost': {
-      id: '/dashboard/tiktok/repost'
-      path: '/repost'
-      fullPath: '/dashboard/tiktok/repost'
-      preLoaderRoute: typeof DashboardTiktokRepostRouteImport
+    '/dashboard/tiktok/favorite': {
+      id: '/dashboard/tiktok/favorite'
+      path: '/favorite'
+      fullPath: '/dashboard/tiktok/favorite'
+      preLoaderRoute: typeof DashboardTiktokFavoriteRouteImport
       parentRoute: typeof DashboardTiktokRoute
     }
     '/dashboard/tiktok/like': {
@@ -213,11 +213,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardTiktokLikeRouteImport
       parentRoute: typeof DashboardTiktokRoute
     }
-    '/dashboard/tiktok/favorite': {
-      id: '/dashboard/tiktok/favorite'
-      path: '/favorite'
-      fullPath: '/dashboard/tiktok/favorite'
-      preLoaderRoute: typeof DashboardTiktokFavoriteRouteImport
+    '/dashboard/tiktok/repost': {
+      id: '/dashboard/tiktok/repost'
+      path: '/repost'
+      fullPath: '/dashboard/tiktok/repost'
+      preLoaderRoute: typeof DashboardTiktokRepostRouteImport
       parentRoute: typeof DashboardTiktokRoute
     }
   }

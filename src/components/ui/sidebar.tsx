@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+	BarChart3,
 	Layers,
 	LayoutDashboard,
 	LogOut,
@@ -10,12 +11,20 @@ import {
 } from "lucide-react";
 import { cn } from "#/lib/utils";
 
-export type SidebarActiveItem = "dashboard" | "accounts" | "tiktok";
+export type SidebarActiveItem =
+	| "dashboard"
+	| "analytics"
+	| "accounts"
+	| "tiktok";
 
 type NavItem = {
 	id: SidebarActiveItem;
 	label: string;
-	to: "/dashboard" | "/dashboard/accounts" | "/dashboard/tiktok";
+	to:
+		| "/dashboard"
+		| "/dashboard/analytics"
+		| "/dashboard/accounts"
+		| "/dashboard/tiktok";
 	icon: LucideIcon;
 };
 
@@ -26,11 +35,18 @@ const NAV_ITEMS: NavItem[] = [
 		to: "/dashboard",
 		icon: LayoutDashboard,
 	},
+	{
+		id: "analytics",
+		label: "Analytics",
+		to: "/dashboard/analytics",
+		icon: BarChart3,
+	},
 	{ id: "accounts", label: "Accounts", to: "/dashboard/accounts", icon: Users },
 	{ id: "tiktok", label: "TikTok Tool", to: "/dashboard/tiktok", icon: Music2 },
 ];
 
 function activeFromPath(pathname: string): SidebarActiveItem {
+	if (pathname.startsWith("/dashboard/analytics")) return "analytics";
 	if (pathname.startsWith("/dashboard/accounts")) return "accounts";
 	if (pathname.startsWith("/dashboard/tiktok")) return "tiktok";
 	return "dashboard";

@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
+	Activity,
 	CheckCircle2,
 	Heart,
 	RefreshCw,
@@ -7,12 +8,16 @@ import {
 	Trash2,
 	XCircle,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { Empty } from "#/components/ui/empaty";
 import {
 	getDashboardMetrics,
 	resetMetrics,
+	subscribeMetrics,
+	type JobMode,
 	type MetricsEvent,
+	type MetricsItem,
 } from "#/services/storage.services";
 
 export const Route = createFileRoute("/dashboard/analytics")({
@@ -44,8 +49,13 @@ function eventTone(type: MetricsEvent["type"]) {
 }
 
 function AnalyticsPage() {
+	const navigate = useNavigate();
 	const [tick, setTick] = useState(0);
 	const metrics = useMemo(() => getDashboardMetrics(), [tick]);
+
+	useEffect(() => {
+		return subscribeMetrics(() => setTick((n) => n + 1));
+	}, []);
 
 	const maxRemoved = Math.max(
 		1,
@@ -176,11 +186,36 @@ function AnalyticsPage() {
 			</div>
 
 			<section className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
+				<h3 className="mb-4 font-bold text-slate-900">Item terhapus</h3>
+				{metrics.recentItems.length === 0 ? (
+					<Empty
+						icon={Trash2}
+						title="Belum ada item terhapus"
+						description="Jalankan hapus repost, like, atau favorite — title, picture, dan description akan muncul di sini."
+						actionLabel="Buka TikTok Tool"
+						onAction={() => void navigate({ to: "/dashboard/tiktok" })}
+						className="min-h-[180px]"
+					/>
+				) : (
+					<ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						{metrics.recentItems.map((item) => (
+							<ItemCard key={item.id} item={item} />
+						))}
+					</ul>
+				)}
+			</section>
+
+			<section className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
 				<h3 className="mb-4 font-bold text-slate-900">Aktivitas terbaru</h3>
 				{metrics.recentEvents.length === 0 ? (
-					<p className="text-sm text-slate-400">
-						Belum ada data. Jalankan hapus repost/like atau connect akun dulu.
-					</p>
+					<Empty
+						icon={Activity}
+						title="Belum ada aktivitas"
+						description="Jalankan hapus repost/like atau connect akun dulu untuk melihat riwayat di sini."
+						actionLabel="Connect akun"
+						onAction={() => void navigate({ to: "/dashboard/accounts" })}
+						className="min-h-[180px]"
+					/>
 				) : (
 					<ul className="divide-y divide-slate-100">
 						{metrics.recentEvents.map((ev) => (
@@ -212,6 +247,91 @@ function AnalyticsPage() {
 				)}
 			</section>
 		</div>
+	);
+}
+
+function modeLabel(mode: JobMode) {
+	if (mode === "like") return "Like";
+	if (mode === "favorite") return "Favorite";
+	return "Repost";
+}
+
+function ItemCard({ item }: { item: MetricsItem }) {
+	const [imgFailed, setImgFailed] = useState(false);
+	const picture = item.picture && !imgFailed ? item.picture : null;
+	const handle = item.author?.startsWith("@")
+		? item.author
+		: `@${item.author || "unknown"}`;
+	const desc =
+		(item.description || "").trim() || "Tanpa deskripsi";
+
+	const body = (
+		<>
+			<div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+				{picture ? (
+					<img
+						src={picture}
+						alt=""
+						referrerPolicy="no-referrer"
+						className="h-full w-full object-cover"
+						onError={() => setImgFailed(true)}
+					/>
+				) : (
+					<div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-cyan-200/60 via-slate-100 to-rose-200/60">
+						<span className="text-[9px] font-bold tracking-widest text-slate-400">
+							TT
+						</span>
+					</div>
+				)}
+			</div>
+			<div className="min-w-0 flex-1">
+				<div className="flex flex-wrap items-center gap-1.5">
+					<span
+						className={`rounded-md border px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+							item.ok
+								? "border-emerald-100 bg-emerald-50 text-emerald-700"
+								: "border-red-100 bg-red-50 text-red-700"
+						}`}
+					>
+						{item.ok ? "OK" : "Gagal"}
+					</span>
+					<span className="rounded-md border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-slate-500">
+						{modeLabel(item.mode)}
+					</span>
+				</div>
+				<p className="mt-1 truncate text-sm font-bold text-slate-800">
+					{item.title}
+				</p>
+				<p className="m-0 truncate text-xs text-slate-400">{handle}</p>
+				<p className="mt-1 mb-0 line-clamp-2 text-xs leading-snug text-slate-500">
+					{desc}
+				</p>
+				<p className="mt-1.5 mb-0 text-[10px] text-slate-400">
+					{formatWhen(item.at)}
+				</p>
+			</div>
+		</>
+	);
+
+	if (item.url) {
+		return (
+			<li>
+				<a
+					href={item.url}
+					target="_blank"
+					rel="noreferrer"
+					className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-2.5 no-underline transition-colors hover:bg-slate-50"
+				>
+					{body}
+				</a>
+			</li>
+		);
+	}
+
+	return (
+		<li className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-2.5">
+			{body}
+		</li>
 	);
 }
 
