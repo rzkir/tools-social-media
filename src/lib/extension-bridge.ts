@@ -3,12 +3,23 @@
  * Uses content-script postMessage first; chrome.runtime only with discovered ID.
  */
 
+export type ExtensionProgressItem = {
+	id: string;
+	author: string;
+	nickname?: string;
+	desc?: string;
+	cover?: string | null;
+	index?: number;
+};
+
 export type ExtensionProgress = {
 	done: number;
 	failed: number;
 	total: number;
 	listed: number;
 	page: number;
+	/** Item currently being removed (TikTok-style preview) */
+	current?: ExtensionProgressItem | null;
 };
 
 export type ExtensionState = {
@@ -17,6 +28,10 @@ export type ExtensionState = {
 	mode?: string | null;
 	progress: ExtensionProgress;
 	lastError: string | null;
+	/** Unix ms when job started */
+	startedAt?: number | null;
+	/** Unix ms when job finished (done / stopped / error) */
+	endedAt?: number | null;
 };
 
 type Pending = {
@@ -231,6 +246,18 @@ export async function startExtensionJob(options: {
 	delayMs: number;
 	mode?: "repost" | "favorite" | "like";
 }): Promise<{ ok: boolean; error?: string }> {
+	// Clear stale progress so UI never flashes a previous run
+	lastState = {
+		running: true,
+		status: "starting",
+		mode: options.mode || "repost",
+		progress: { done: 0, failed: 0, total: 0, listed: 0, page: 0 },
+		lastError: null,
+		startedAt: null,
+		endedAt: null,
+	};
+	for (const cb of stateListeners) cb(lastState);
+
 	const res = (await sendToExtension({
 		type: "START",
 		uniqueId: options.uniqueId,
@@ -243,6 +270,17 @@ export async function startExtensionJob(options: {
 
 export async function stopExtensionJob(): Promise<void> {
 	await sendToExtension({ type: "STOP" });
+}
+
+export async function confirmExtensionRemove(options: {
+	limit: number;
+}): Promise<{ ok: boolean; error?: string }> {
+	const limit = Math.max(1, Math.floor(Number(options.limit) || 1));
+	const res = (await sendToExtension({
+		type: "CONFIRM_REMOVE",
+		limit,
+	})) as { ok?: boolean; error?: string };
+	return { ok: Boolean(res?.ok), error: res?.error };
 }
 
 export async function fetchExtensionState(): Promise<ExtensionState | null> {

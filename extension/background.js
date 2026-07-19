@@ -1,16 +1,5 @@
-/**
- * Relays dashboard ↔ TikTok tab messages.
- * Accepts messages from content scripts AND from the web page
- * (via externally_connectable + chrome.runtime.sendMessage).
- */
+const CS_VERSION = 14;
 
-/** Keep in sync with extension/content-tiktok.js CS_VERSION */
-const CS_VERSION = 9;
-
-/**
- * Unlike (Disukai) — proven /api/commit/item/digg/ type=0.
- * Must run in page MAIN world (csrf from __$UNIVERSAL_DATA$).
- */
 async function undiggInMainWorld(awemeId) {
   const id = String(awemeId);
   let ctx = null;
@@ -137,10 +126,6 @@ async function undiggInMainWorld(awemeId) {
   }
 }
 
-/**
- * Runs entirely in the page MAIN world — same pattern as TikTok's own UI
- * and the working "unlike" flow (csrf from __$UNIVERSAL_DATA$, full query).
- */
 async function uncollectInMainWorld(awemeId) {
   const id = String(awemeId);
   let ctx = null;
@@ -293,6 +278,8 @@ const state = {
   mode: null,
   progress: { done: 0, failed: 0, total: 0, listed: 0, page: 0 },
   lastError: null,
+  startedAt: null,
+  endedAt: null,
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -340,19 +327,23 @@ function normalizeMode(mode) {
   return "repost";
 }
 
+/**
+ * Open / navigate TikTok profile in a background tab — never steal focus
+ * from the dashboard tab the user is on.
+ */
 async function ensureTikTokTab(uniqueId, mode) {
   let tabId = await findTikTokTab(uniqueId);
   const url = profileUrlForMode(uniqueId, mode);
 
   if (!tabId) {
-    const tab = await chrome.tabs.create({ url, active: true });
+    const tab = await chrome.tabs.create({ url, active: false });
     tabId = tab.id;
     await waitTabComplete(tabId);
     return tabId;
   }
 
-  // Always open the profile URL (never stay on /foryou or /liked).
-  await chrome.tabs.update(tabId, { url, active: true });
+  // Navigate existing TikTok tab without focusing it
+  await chrome.tabs.update(tabId, { url, active: false });
   await waitTabComplete(tabId);
   return tabId;
 }
@@ -395,11 +386,6 @@ function isCurrentContentScript(res) {
   return Boolean(res?.ok && res.version === CS_VERSION);
 }
 
-/**
- * Ping / inject content-tiktok.js until a CURRENT version answers.
- * Stale scripts (pre-favorite) still answer ping but ignore `mode` → always
- * list reposts; those must be flushed via tab reload.
- */
 async function ensureTikTokContentScript(tabId) {
   for (let i = 0; i < 10; i++) {
     const res = await sendPing(tabId);
@@ -433,15 +419,14 @@ async function startOnTikTokTab(tabId, payload) {
   // Persist so a fresh content-script load can auto-resume with correct mode
   await chrome.storage.session.set({ rrPendingRun: runPayload });
 
-  // Always reload: flushes stale CS listeners that ignore `mode` and still
-  // navigate to /liked → TikTok redirects that to /foryou.
+  // Reload in background to flush stale CS — does not steal dashboard focus
   await reloadTabForFreshScript(tabId);
   await sleep(600);
 
   let ready = await ensureTikTokContentScript(tabId);
   if (!ready.ok) {
     throw new Error(
-      "Tab TikTok belum siap. Buka tiktok.com, login, refresh tab itu, lalu Start lagi.",
+      "Tab TikTok belum siap. Refresh tab tiktok.com, pastikan login, lalu Start lagi.",
     );
   }
 
@@ -472,9 +457,54 @@ async function handleMessage(msg, sender) {
     return { ok: true, state };
   }
 
+  if (msg?.type === "GET_TIKTOK_COOKIES") {
+    try {
+      const list = await chrome.cookies.getAll({ domain: "tiktok.com" });
+      const jar = {};
+      for (const c of list) {
+        if (!c?.name) continue;
+        // Prefer non-empty / longer values if duplicates exist
+        const prev = jar[c.name];
+        if (!prev || String(c.value || "").length > String(prev).length) {
+          jar[c.name] = c.value || "";
+        }
+      }
+      const sessionid = jar.sessionid || jar.sessionid_ss || "";
+      const msToken = jar.msToken || "";
+      if (!sessionid) {
+        return {
+          ok: false,
+          error:
+            "Cookie sessionid tidak ditemukan. Login dulu di tab tiktok.com, lalu coba lagi.",
+          cookies: jar,
+        };
+      }
+      return {
+        ok: true,
+        cookies: jar,
+        values: {
+          sessionid,
+          tt_csrf_token: jar.tt_csrf_token || jar["tt-csrf-token"] || "",
+          msToken,
+          ttwid: jar.ttwid || "",
+          s_v_web_id: jar.s_v_web_id || jar.verifyFp || "",
+        },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Gagal membaca cookie TikTok dari browser.",
+      };
+    }
+  }
+
   if (msg?.type === "STOP") {
     state.running = false;
     state.status = "stopped";
+    state.endedAt = Date.now();
     await broadcast({ type: "RR_STOP" });
     await broadcast({ type: "RR_STATE", state });
     return { ok: true, state };
@@ -496,6 +526,9 @@ async function handleMessage(msg, sender) {
     state.status = "starting";
     state.mode = mode;
     state.lastError = null;
+    // Delete timer starts only on CONFIRM_REMOVE
+    state.startedAt = null;
+    state.endedAt = null;
     state.progress = { done: 0, failed: 0, total: 0, listed: 0, page: 0 };
     await broadcast({ type: "RR_STATE", state });
 
@@ -507,6 +540,7 @@ async function handleMessage(msg, sender) {
     } catch (err) {
       state.running = false;
       state.status = "error";
+      state.endedAt = Date.now();
       const raw = err instanceof Error ? err.message : String(err);
       state.lastError =
         raw.includes("Receiving end") || raw.includes("Could not establish")
@@ -522,15 +556,61 @@ async function handleMessage(msg, sender) {
     state.status = msg.status || state.status;
     if (msg.progress) state.progress = { ...state.progress, ...msg.progress };
     if (msg.error) state.lastError = msg.error;
-    if (
+    if (msg.status === "ready") {
+      // Waiting for user to choose how many to delete — keep running
+      state.running = true;
+      state.endedAt = null;
+    } else if (
       msg.status === "done" ||
       msg.status === "error" ||
       msg.status === "stopped"
     ) {
       state.running = false;
+      state.endedAt = Date.now();
     }
     await broadcast({ type: "RR_STATE", state });
     return { ok: true };
+  }
+
+  if (msg?.type === "CONFIRM_REMOVE") {
+    const limit = Math.max(1, Number(msg.limit) || 1);
+    const tabs = await chrome.tabs.query({
+      url: ["https://www.tiktok.com/*", "https://*.tiktok.com/*"],
+    });
+    let sent = false;
+    let lastError = "Tab TikTok tidak ditemukan.";
+    for (const tab of tabs) {
+      if (!tab.id) continue;
+      try {
+        const res = await chrome.tabs.sendMessage(tab.id, {
+          type: "RR_CONFIRM_REMOVE",
+          limit,
+        });
+        if (res?.ok) {
+          sent = true;
+          state.status = "removing";
+          state.running = true;
+          // Timer starts when user confirms delete, not during listing
+          state.startedAt = Date.now();
+          state.endedAt = null;
+          state.progress = {
+            ...state.progress,
+            total: Math.min(limit, state.progress.listed || limit),
+            done: 0,
+            failed: 0,
+          };
+          await broadcast({ type: "RR_STATE", state });
+          break;
+        }
+        if (res?.error) lastError = res.error;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+      }
+    }
+    if (!sent) {
+      return { ok: false, error: lastError, state };
+    }
+    return { ok: true, state };
   }
 
   /** Unlike (Disukai) entirely in page MAIN world. */

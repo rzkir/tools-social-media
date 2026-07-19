@@ -1,23 +1,28 @@
-/**
- * Runs on tiktok.com — list + remove reposts, likes, OR favorites.
- * Modes: "repost" | "like" | "favorite"
- *
- * CS_VERSION must stay in sync with background.js — used to detect stale
- * injected scripts after an extension update (old script ignored `mode`).
- *
- * Uses a replaceable window.__rrTikTokApi so re-injects update handlers
- * without stacking duplicate listeners (background still reloads on START).
- */
 (() => {
-  const CS_VERSION = 9;
+  const CS_VERSION = 14;
 
   let stopped = false;
   let panel = null;
   let activeMode = "repost";
   let runGeneration = 0;
+  /** @type {null | ((value: { limit: number, cancelled?: boolean }) => void)} */
+  let confirmResolve = null;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  function waitForConfirmLimit() {
+    return new Promise((resolve) => {
+      confirmResolve = resolve;
+    });
+  }
+
+  function resolveConfirm(payload) {
+    if (!confirmResolve) return false;
+    const fn = confirmResolve;
+    confirmResolve = null;
+    fn(payload);
+    return true;
+  }
   const LABELS = {
     repost: {
       title: "Remove Repost",
@@ -141,6 +146,33 @@
     return s;
   }
 
+  /** TikTok media field → first https URL */
+  function firstMediaUrl(value) {
+    if (!value) return null;
+    if (typeof value === "string") {
+      return /^https?:\/\//i.test(value) ? value : null;
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const hit = firstMediaUrl(entry);
+        if (hit) return hit;
+      }
+      return null;
+    }
+    if (typeof value === "object") {
+      const list = value.url_list || value.urlList;
+      if (Array.isArray(list)) {
+        for (const u of list) {
+          if (typeof u === "string" && /^https?:\/\//i.test(u)) return u;
+        }
+      }
+      if (typeof value.url === "string" && /^https?:\/\//i.test(value.url)) {
+        return value.url;
+      }
+    }
+    return null;
+  }
+
   function isRateLimited(text, status) {
     if (status === 429) return true;
     return /ratelimit/i.test(String(text || ""));
@@ -206,25 +238,36 @@
     const rawItems = json.itemList || json.item_list || [];
     const items = rawItems
       .filter((e) => e && (e.id != null || e.aweme_id != null))
-      .map((e) => ({
-        id: String(e.id != null ? e.id : e.aweme_id),
-        author: e.author?.uniqueId
-          ? "@" + e.author.uniqueId
-          : e.author?.unique_id
-            ? "@" + e.author.unique_id
-            : "@unknown",
-        createTime:
-          e.createTime != null
-            ? String(e.createTime)
-            : e.create_time != null
-              ? String(e.create_time)
-              : null,
-      }));
+      .map((e) => {
+        const video = e.video || {};
+        const cover =
+          firstMediaUrl(video.cover) ||
+          firstMediaUrl(video.originCover) ||
+          firstMediaUrl(video.origin_cover) ||
+          firstMediaUrl(video.dynamicCover) ||
+          firstMediaUrl(video.dynamic_cover) ||
+          firstMediaUrl(e.cover) ||
+          null;
+        const authorId =
+          e.author?.uniqueId || e.author?.unique_id || "unknown";
+        return {
+          id: String(e.id != null ? e.id : e.aweme_id),
+          author: "@" + authorId,
+          nickname: e.author?.nickname || e.author?.nickName || authorId,
+          desc: String(e.desc || e.title || "").trim(),
+          cover,
+          createTime:
+            e.createTime != null
+              ? String(e.createTime)
+              : e.create_time != null
+                ? String(e.create_time)
+                : null,
+        };
+      });
 
     let nextCursor = normalizeCursor(
       json.cursor ?? json.maxCursor ?? json.max_cursor,
     );
-    // Some collect responses omit cursor — fall back to last item timestamp
     if (!nextCursor && items.length) {
       const lastTs = items[items.length - 1].createTime;
       if (lastTs && lastTs !== String(cursor)) nextCursor = lastTs;
@@ -236,7 +279,6 @@
         json.hasMoreOfLoadMore ??
         json.has_more_of_load_more,
     );
-    // TikTok sometimes omits hasMore on collect; a full-ish page + new cursor ⇒ more
     const hasMore =
       explicitMore != null
         ? explicitMore
@@ -291,7 +333,6 @@
     return getCookie("tt_csrf_token") || getCookie("tt-csrf-token") || "";
   }
 
-  /** TikTok may send status_code (snake) or statusCode (camel). */
   function apiStatus(json) {
     if (!json || typeof json !== "object")
       return { ok: false, msg: "empty json" };
@@ -338,9 +379,6 @@
     }
   }
 
-  /**
-   * Unlike via background → MAIN world (proven digg type=0 pattern).
-   */
   async function removeLike(itemId) {
     const res = await new Promise((resolve) => {
       chrome.runtime.sendMessage(
@@ -362,10 +400,6 @@
     }
   }
 
-  /**
-   * Uncollect via background → MAIN world (csrf from __$UNIVERSAL_DATA$,
-   * full query params — same pattern as working unlike/digg).
-   */
   async function removeFavorite(itemId) {
     const res = await new Promise((resolve) => {
       chrome.runtime.sendMessage(
@@ -397,7 +431,6 @@
     if (activeMode === "favorite") {
       return "https://www.tiktok.com/@" + uniqueId + "?lang=en";
     }
-    // Like + repost: profile root (same as repost). `/liked` redirects to /foryou.
     return "https://www.tiktok.com/@" + uniqueId;
   }
 
@@ -412,8 +445,6 @@
       const path = "/@" + uniqueId;
       const pathname = (location.pathname || "").toLowerCase();
       const onProfile = pathname.includes(path.toLowerCase());
-      // Never stay on /liked (TikTok redirects private liked → /foryou)
-      // or /foryou — always need the profile root for secUid.
       const onBadRoute =
         /\/foryou/i.test(pathname) ||
         /\/@[^/]+\/liked/i.test(pathname) ||
@@ -446,6 +477,7 @@
       const err = "secUid tidak ditemukan. Login & buka profil sendiri.";
       setStatus(err);
       report({ status: "error", error: err });
+      closePanel();
       return;
     }
 
@@ -474,7 +506,6 @@
       });
 
       const next = pageData.cursor;
-      // Stop: no new items, no more flag, cursor missing/stuck, or cursor == -1
       if (!added) break;
       if (!pageData.hasMore) break;
       if (!next || next === cursor) break;
@@ -492,22 +523,70 @@
       return;
     }
 
+    setStatus(
+      "Siap hapus. Ditemukan " +
+        all.length +
+        " " +
+        noun +
+        ". Atur jumlah di dashboard, lalu konfirmasi.",
+    );
+    report({
+      status: "ready",
+      progress: {
+        listed: all.length,
+        total: 0,
+        done: 0,
+        failed: 0,
+        page: 0,
+      },
+    });
+
+    const confirm = await waitForConfirmLimit();
+    if (stopped || confirm?.cancelled) {
+      setStatus("Dihentikan sebelum hapus.");
+      report({
+        status: "stopped",
+        progress: {
+          listed: all.length,
+          total: all.length,
+          done: 0,
+          failed: 0,
+        },
+      });
+      closePanel(2500);
+      return;
+    }
+
+    const limit = Math.max(
+      1,
+      Math.min(
+        Number(confirm?.limit) || all.length,
+        all.length,
+      ),
+    );
+    const queue = all.slice(0, limit);
+
     let ok = 0;
     let fail = 0;
     report({
       status: "removing",
-      progress: { total: all.length, done: 0, failed: 0, listed: all.length },
+      progress: {
+        total: queue.length,
+        done: 0,
+        failed: 0,
+        listed: all.length,
+      },
     });
 
-    for (let i = 0; i < all.length; i++) {
+    for (let i = 0; i < queue.length; i++) {
       if (stopped) {
         setStatus(
-          "Stop. OK " + ok + " · gagal " + fail + " · sisa " + (all.length - i),
+          "Stop. OK " + ok + " · gagal " + fail + " · sisa " + (queue.length - i),
         );
         report({
           status: "stopped",
           progress: {
-            total: all.length,
+            total: queue.length,
             done: ok,
             failed: fail,
             listed: all.length,
@@ -516,7 +595,24 @@
         closePanel(2500);
         return;
       }
-      const item = all[i];
+      const item = queue[i];
+      report({
+        status: "removing",
+        progress: {
+          total: queue.length,
+          done: ok,
+          failed: fail,
+          listed: all.length,
+          current: {
+            id: item.id,
+            author: item.author,
+            nickname: item.nickname || item.author,
+            desc: item.desc || "",
+            cover: item.cover || null,
+            index: i + 1,
+          },
+        },
+      });
       try {
         await removeOne(item.id);
         ok++;
@@ -524,7 +620,7 @@
           "Hapus " +
             (i + 1) +
             "/" +
-            all.length +
+            queue.length +
             " · " +
             item.author +
             " · OK " +
@@ -536,7 +632,7 @@
           "Gagal " +
             (i + 1) +
             "/" +
-            all.length +
+            queue.length +
             ": " +
             (e && e.message ? e.message : e),
         );
@@ -544,20 +640,38 @@
       report({
         status: "removing",
         progress: {
-          total: all.length,
+          total: queue.length,
           done: ok,
           failed: fail,
           listed: all.length,
+          current: {
+            id: item.id,
+            author: item.author,
+            nickname: item.nickname || item.author,
+            desc: item.desc || "",
+            cover: item.cover || null,
+            index: i + 1,
+          },
         },
       });
       await sleep(delayMs);
     }
 
-    setStatus("Selesai. Berhasil " + ok + ", gagal " + fail + ".");
+    setStatus(
+      "Selesai. Berhasil " +
+        ok +
+        ", gagal " +
+        fail +
+        " (dari " +
+        queue.length +
+        "/" +
+        all.length +
+        ").",
+    );
     report({
       status: "done",
       progress: {
-        total: all.length,
+        total: queue.length,
         done: ok,
         failed: fail,
         listed: all.length,
@@ -579,7 +693,17 @@
     if (msg?.type === "RR_STOP") {
       stopped = true;
       setStatus("Dihentikan.");
+      resolveConfirm({ limit: 0, cancelled: true });
       sendResponse({ ok: true });
+      return true;
+    }
+    if (msg?.type === "RR_CONFIRM_REMOVE") {
+      const limit = Math.max(1, Number(msg.limit) || 1);
+      const ok = resolveConfirm({ limit, cancelled: false });
+      sendResponse({
+        ok,
+        error: ok ? undefined : "Tidak ada sesi siap hapus.",
+      });
       return true;
     }
     if (msg?.type === "RR_RUN") {
@@ -604,7 +728,6 @@
     return false;
   }
 
-  // Latest inject wins — single listener delegates here.
   window.__rrTikTokApi = {
     version: CS_VERSION,
     handleMessage,

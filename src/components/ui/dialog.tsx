@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Minimize2, X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "#/lib/utils";
@@ -10,6 +10,8 @@ export type DialogProps = {
 	description?: string;
 	children: ReactNode;
 	className?: string;
+	/** Optional minimize control in the header */
+	onMinimize?: () => void;
 };
 
 export function Dialog({
@@ -19,6 +21,7 @@ export function Dialog({
 	description,
 	children,
 	className,
+	onMinimize,
 }: DialogProps) {
 	const titleId = useId();
 	const descriptionId = useId();
@@ -28,7 +31,10 @@ export function Dialog({
 		if (!open) return;
 
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") onOpenChange(false);
+			if (event.key === "Escape") {
+				if (onMinimize) onMinimize();
+				else onOpenChange(false);
+			}
 		};
 
 		const previousOverflow = document.body.style.overflow;
@@ -39,7 +45,7 @@ export function Dialog({
 			document.body.style.overflow = previousOverflow;
 			window.removeEventListener("keydown", onKeyDown);
 		};
-	}, [open, onOpenChange]);
+	}, [open, onOpenChange, onMinimize]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -52,9 +58,12 @@ export function Dialog({
 		<div className="fixed inset-0 z-50 flex items-center justify-center p-4">
 			<button
 				type="button"
-				aria-label="Close dialog"
+				aria-label={onMinimize ? "Minimize dialog" : "Close dialog"}
 				className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
-				onClick={() => onOpenChange(false)}
+				onClick={() => {
+					if (onMinimize) onMinimize();
+					else onOpenChange(false);
+				}}
 			/>
 			<div
 				ref={panelRef}
@@ -82,14 +91,30 @@ export function Dialog({
 							</p>
 						) : null}
 					</div>
-					<button
-						type="button"
-						onClick={() => onOpenChange(false)}
-						className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
-						aria-label="Close"
-					>
-						<X className="h-4 w-4" />
-					</button>
+					<div className="flex shrink-0 gap-2">
+						{onMinimize ? (
+							<button
+								type="button"
+								onClick={onMinimize}
+								className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
+								aria-label="Minimize"
+								title="Minimize"
+							>
+								<Minimize2 className="h-4 w-4" />
+							</button>
+						) : null}
+						<button
+							type="button"
+							onClick={() => {
+								if (onMinimize) onMinimize();
+								else onOpenChange(false);
+							}}
+							className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
+							aria-label={onMinimize ? "Minimize" : "Close"}
+						>
+							<X className="h-4 w-4" />
+						</button>
+					</div>
 				</header>
 				<div className="overflow-y-auto px-6 py-5">{children}</div>
 			</div>

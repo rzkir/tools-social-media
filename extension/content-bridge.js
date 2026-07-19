@@ -1,8 +1,3 @@
-/**
- * Bridge: dashboard page ↔ extension background via window.postMessage.
- * Marks the page with data-rr-extension so React can detect sync.
- * Also re-stamps the marker (React hydration can wipe <html> attrs).
- */
 (() => {
   const SOURCE_PAGE = "rr-dashboard";
   const SOURCE_EXT = "rr-extension";

@@ -1,22 +1,18 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { BrowserScriptPanel } from "#/components/BrowserScriptPanel";
-import { TikTokProgressDialog } from "#/components/dialog/tiktok-progres.dialog";
 import {
 	EMPTY_COOKIE_VALUES,
 	type TikTokCookieValues,
 } from "#/components/TikTokCookieForm";
 import { Button } from "#/components/ui/button";
 import { Field, FieldLabel } from "#/components/ui/field";
+import { useMinimizeOptional } from "#/context/MinimizeContext";
+import { useNotificationOptional } from "#/context/NotificationContext";
 import {
-	type ExtensionState,
-	fetchExtensionState,
-	markExtensionHost,
 	pingExtension,
 	startExtensionJob,
 	stopExtensionJob,
-	subscribeExtensionState,
-	unmarkExtensionHost,
 } from "#/lib/extension-bridge";
 import {
 	hasSavedAccount,
@@ -56,7 +52,7 @@ const COPY: Record<
 			"Hubungkan akun sekali, lalu Start dari sini lewat ekstensi Chrome.",
 		startLabel: "Start Hapus Repost",
 		idleHint:
-			"Siap. Klik Start — ekstensi membuka tab TikTok lalu hapus otomatis.",
+			"Siap. Klik Start untuk memuat daftar, lalu atur jumlah yang dihapus.",
 		listingWord: "repost",
 	},
 	favorite: {
@@ -68,7 +64,7 @@ const COPY: Record<
 			"Hubungkan akun sekali, lalu Start dari sini lewat ekstensi Chrome.",
 		startLabel: "Start Hapus Favorite",
 		idleHint:
-			"Siap. Klik Start — ekstensi membuka tab TikTok lalu hapus favorite otomatis.",
+			"Siap. Klik Start untuk memuat daftar, lalu atur jumlah yang dihapus.",
 		listingWord: "favorite",
 	},
 	like: {
@@ -80,38 +76,34 @@ const COPY: Record<
 			"Hubungkan akun sekali, lalu Start dari sini lewat ekstensi Chrome.",
 		startLabel: "Start Hapus Disukai",
 		idleHint:
-			"Siap. Klik Start — ekstensi membuka tab TikTok lalu hapus like otomatis.",
+			"Siap. Klik Start untuk memuat daftar, lalu atur jumlah yang dihapus.",
 		listingWord: "like",
 	},
 };
 
-function isActiveStatus(status: string | undefined) {
-	return Boolean(
-		status &&
-			status !== "idle" &&
-			status !== "done" &&
-			status !== "stopped" &&
-			status !== "error",
-	);
-}
-
 export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	const copy = COPY[mode];
+	const minimizeCtx = useMinimizeOptional();
+	const notify = useNotificationOptional();
+	const extInstalled = minimizeCtx?.extInstalled ?? false;
+	const running = minimizeCtx?.running ?? false;
+	const job = minimizeCtx?.job ?? null;
+	const hasProgress = minimizeCtx?.hasProgress ?? false;
+	const openProgress = minimizeCtx?.openProgress;
+	const expand = minimizeCtx?.expand;
+	const stopJob = minimizeCtx?.stopJob ?? (() => stopExtensionJob());
 	const [cookieValues, setCookieValues] =
 		useState<TikTokCookieValues>(EMPTY_COOKIE_VALUES);
 	const [user, setUser] = useState<TikTokUser | null>(null);
 	const [speed, setSpeed] = useState<SpeedMode>("normal");
 	const [booting, setBooting] = useState(true);
-	const [extInstalled, setExtInstalled] = useState(false);
 	const [extChecking, setExtChecking] = useState(true);
-	const [extState, setExtState] = useState<ExtensionState | null>(null);
+	const [localExtOk, setLocalExtOk] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [showFallback, setShowFallback] = useState(false);
 	const [editAccount, setEditAccount] = useState(false);
-	const [progressOpen, setProgressOpen] = useState(false);
 
 	useEffect(() => {
-		markExtensionHost();
 		const stored = loadCookieSession();
 		if (stored) {
 			setCookieValues(stored.cookies);
@@ -122,28 +114,17 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 		}
 		setBooting(false);
 
-		const unsub = subscribeExtensionState(setExtState);
 		void (async () => {
 			setExtChecking(true);
 			const ok = await pingExtension();
-			setExtInstalled(ok);
-			if (ok) {
-				const st = await fetchExtensionState();
-				if (st) setExtState(st);
-			}
+			setLocalExtOk(ok);
 			setExtChecking(false);
 		})();
-
-		const interval = window.setInterval(() => {
-			void pingExtension().then(setExtInstalled);
-		}, 4000);
-
-		return () => {
-			unmarkExtensionHost();
-			unsub();
-			window.clearInterval(interval);
-		};
 	}, []);
+
+	useEffect(() => {
+		setLocalExtOk(extInstalled);
+	}, [extInstalled]);
 
 	const persist = (
 		nextCookies: TikTokCookieValues,
@@ -158,36 +139,28 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	const secUid = cookieValues.secUid || user?.secUid || "";
 	const displayName = user?.nickname || username;
 	const hasAccount = Boolean(username.trim());
-	const matchesMode = !extState?.mode || extState.mode === mode;
-	const thisJobRunning = Boolean(extState?.running) && matchesMode;
-	const hasProgressForMode =
-		Boolean(extState) &&
-		matchesMode &&
-		extState!.status !== "idle" &&
-		(thisJobRunning ||
-			isActiveStatus(extState?.status) ||
-			extState?.status === "done" ||
-			extState?.status === "stopped" ||
-			extState?.status === "error");
-
-	useEffect(() => {
-		if (!matchesMode) return;
-		if (thisJobRunning || isActiveStatus(extState?.status)) {
-			setProgressOpen(true);
-		}
-	}, [thisJobRunning, extState?.status, matchesMode]);
+	const extensionOk = localExtOk || extInstalled;
+	const thisJobRunning = running && job?.mode === mode;
+	const showProgressActions = Boolean(job) || hasProgress;
 
 	const onStart = async () => {
 		setError(null);
 		const handle = username.trim().replace(/^@/, "");
 		if (!handle) {
-			setError("Belum ada akun. Isi username atau hubungkan di Accounts.");
+			const msg =
+				"Belum ada akun. Isi username atau hubungkan di Accounts.";
+			setError(msg);
+			notify?.warning(msg, { title: "Akun diperlukan" });
 			setEditAccount(true);
 			return;
 		}
 		persist({ ...cookieValues, username: handle });
 		setEditAccount(false);
-		setProgressOpen(true);
+		openProgress?.({
+			mode,
+			modeLabel: copy.title,
+			listingWord: copy.listingWord,
+		});
 		const result = await startExtensionJob({
 			uniqueId: handle,
 			secUid: secUid.trim() || undefined,
@@ -195,22 +168,30 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 			mode,
 		});
 		if (!result.ok) {
-			setError(result.error || "Gagal memulai.");
+			const msg = result.error || "Gagal memulai.";
+			setError(msg);
+			notify?.error(msg, { title: "Gagal Start" });
+		} else {
+			notify?.info(`Memuat daftar ${copy.listingWord}…`, {
+				title: copy.title,
+			});
 		}
-	};
-
-	const onStop = async () => {
-		await stopExtensionJob();
 	};
 
 	const onRecheck = async () => {
 		setExtChecking(true);
 		const ok = await pingExtension();
-		setExtInstalled(ok);
+		setLocalExtOk(ok);
 		setExtChecking(false);
-		if (!ok)
-			setError("Ekstensi belum terdeteksi. Ikuti langkah instal di bawah.");
-		else setError(null);
+		if (!ok) {
+			const msg =
+				"Ekstensi belum terdeteksi. Ikuti langkah instal di bawah.";
+			setError(msg);
+			notify?.error(msg, { title: "Ekstensi" });
+		} else {
+			setError(null);
+			notify?.success("Ekstensi terhubung.", { title: "Ekstensi" });
+		}
 	};
 
 	if (booting) {
@@ -245,23 +226,23 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 						<p className="m-0 text-sm text-slate-600">
 							{extChecking
 								? "Mengecek ekstensi…"
-								: extInstalled
+								: extensionOk
 									? "Ekstensi terhubung — bisa Start dari sini."
 									: "Ekstensi belum terpasang."}
 						</p>
 					</div>
 					<span
 						className={`rounded-full px-3 py-1 text-xs font-bold ${
-							extInstalled
+							extensionOk
 								? "bg-emerald-50 text-emerald-700"
 								: "bg-slate-100 text-slate-500"
 						}`}
 					>
-						{extInstalled ? "Connected" : "Not found"}
+						{extensionOk ? "Connected" : "Not found"}
 					</span>
 				</div>
 
-				{!extInstalled ? (
+				{!extensionOk ? (
 					<div className="space-y-3 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4 text-sm text-orange-900">
 						<p className="m-0 font-semibold">Install sekali (Load unpacked)</p>
 						<ol className="m-0 list-decimal space-y-2 pl-5">
@@ -430,15 +411,14 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 
 							{thisJobRunning ? (
 								<>
-									<Button variant="danger" onClick={() => void onStop()}>
+									<Button variant="danger" onClick={() => void stopJob()}>
 										Stop
 									</Button>
-									<Button
-										variant="secondary"
-										onClick={() => setProgressOpen(true)}
-									>
-										Lihat Progress
-									</Button>
+									{expand ? (
+										<Button variant="secondary" onClick={expand}>
+											Lihat Progress
+										</Button>
+									) : null}
 								</>
 							) : (
 								<>
@@ -449,11 +429,8 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 									>
 										{copy.startLabel}
 									</Button>
-									{hasProgressForMode ? (
-										<Button
-											variant="secondary"
-											onClick={() => setProgressOpen(true)}
-										>
+									{showProgressActions && expand ? (
+										<Button variant="secondary" onClick={expand}>
 											Lihat Progress
 										</Button>
 									) : null}
@@ -527,15 +504,6 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 				</section>
 			) : null}
 
-			<TikTokProgressDialog
-				open={progressOpen && matchesMode}
-				onOpenChange={setProgressOpen}
-				modeLabel={copy.title}
-				listingWord={copy.listingWord}
-				extState={matchesMode ? extState : null}
-				running={thisJobRunning}
-				onStop={() => void onStop()}
-			/>
 		</div>
 	);
 }
