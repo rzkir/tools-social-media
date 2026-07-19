@@ -8,13 +8,15 @@ import {
 	useState,
 } from "react";
 import {
+	useConfirmExtensionRemove,
+	useExtensionInstalled,
+	useExtensionState,
+	useSetExtensionState,
+	useStopExtensionJob,
+} from "#/hooks/use-extension";
+import {
 	type ExtensionState,
-	confirmExtensionRemove,
-	fetchExtensionState,
 	markExtensionHost,
-	pingExtension,
-	stopExtensionJob,
-	subscribeExtensionState,
 	unmarkExtensionHost,
 } from "#/lib/extension-bridge";
 
@@ -69,34 +71,23 @@ export function MinimizeProvider({ children }: { children: ReactNode }) {
 	const [job, setJob] = useState<ProgressJob | null>(null);
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [minimized, setMinimized] = useState(false);
-	const [extState, setExtState] = useState<ExtensionState | null>(null);
-	const [extInstalled, setExtInstalled] = useState(false);
 	/** Local clock start — keeps timer working even if extension omits startedAt */
 	const [clientStartedAt, setClientStartedAt] = useState<number | null>(null);
 
+	const { data: extInstalled = false } = useExtensionInstalled();
+	const { data: extState = null } = useExtensionState(true);
+	const setExtState = useSetExtensionState();
+	const stopMutation = useStopExtensionJob();
+	const confirmMutation = useConfirmExtensionRemove();
+
 	useEffect(() => {
 		markExtensionHost();
-		const unsub = subscribeExtensionState(setExtState);
-		void (async () => {
-			const ok = await pingExtension();
-			setExtInstalled(ok);
-			if (ok) {
-				const st = await fetchExtensionState();
-				if (st) setExtState(st);
-			}
-		})();
-		const interval = window.setInterval(() => {
-			void pingExtension().then(setExtInstalled);
-		}, 4000);
 		return () => {
 			unmarkExtensionHost();
-			unsub();
-			window.clearInterval(interval);
 		};
 	}, []);
 
-	const running =
-		Boolean(extState?.running) && matchesJob(extState, job);
+	const running = Boolean(extState?.running) && matchesJob(extState, job);
 
 	const hasProgress = Boolean(
 		job &&
@@ -121,22 +112,25 @@ export function MinimizeProvider({ children }: { children: ReactNode }) {
 		}
 	}, [extState, job, running, dialogOpen, minimized]);
 
-	const openProgress = useCallback((next: ProgressJob) => {
-		setJob(next);
-		setMinimized(false);
-		setDialogOpen(true);
-		setClientStartedAt(null);
-		// Wipe stale job UI immediately so we never show previous run as "already going"
-		setExtState({
-			running: true,
-			status: "starting",
-			mode: next.mode,
-			progress: { done: 0, failed: 0, total: 0, listed: 0, page: 0 },
-			lastError: null,
-			startedAt: null,
-			endedAt: null,
-		});
-	}, []);
+	const openProgress = useCallback(
+		(next: ProgressJob) => {
+			setJob(next);
+			setMinimized(false);
+			setDialogOpen(true);
+			setClientStartedAt(null);
+			// Wipe stale job UI immediately so we never show previous run as "already going"
+			setExtState({
+				running: true,
+				status: "starting",
+				mode: next.mode,
+				progress: { done: 0, failed: 0, total: 0, listed: 0, page: 0 },
+				lastError: null,
+				startedAt: null,
+				endedAt: null,
+			});
+		},
+		[setExtState],
+	);
 
 	const minimize = useCallback(() => {
 		setDialogOpen(false);
@@ -166,15 +160,18 @@ export function MinimizeProvider({ children }: { children: ReactNode }) {
 	}, [running, extState?.status, minimize, dismiss]);
 
 	const stopJob = useCallback(async () => {
-		await stopExtensionJob();
-	}, []);
+		await stopMutation.mutateAsync();
+	}, [stopMutation]);
 
-	const confirmRemove = useCallback(async (limit: number) => {
-		setClientStartedAt(Date.now());
-		setMinimized(false);
-		setDialogOpen(true);
-		return confirmExtensionRemove({ limit });
-	}, []);
+	const confirmRemove = useCallback(
+		async (limit: number) => {
+			setClientStartedAt(Date.now());
+			setMinimized(false);
+			setDialogOpen(true);
+			return confirmMutation.mutateAsync({ limit });
+		},
+		[confirmMutation],
+	);
 
 	// When listing finishes, open dialog so user can set delete limit
 	useEffect(() => {
@@ -200,8 +197,7 @@ export function MinimizeProvider({ children }: { children: ReactNode }) {
 			startedAt =
 				clientStartedAt == null
 					? (extState.startedAt ?? null)
-					: extState.startedAt != null &&
-							extState.startedAt >= clientStartedAt
+					: extState.startedAt != null && extState.startedAt >= clientStartedAt
 						? extState.startedAt
 						: clientStartedAt;
 		}
@@ -247,7 +243,9 @@ export function MinimizeProvider({ children }: { children: ReactNode }) {
 	);
 
 	return (
-		<MinimizeContext.Provider value={value}>{children}</MinimizeContext.Provider>
+		<MinimizeContext.Provider value={value}>
+			{children}
+		</MinimizeContext.Provider>
 	);
 }
 

@@ -8,32 +8,20 @@ import {
 	Trash2,
 	XCircle,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Empty } from "#/components/ui/empaty";
-import {
-	getDashboardMetrics,
-	resetMetrics,
-	subscribeMetrics,
-	type JobMode,
-	type MetricsEvent,
-	type MetricsItem,
+import { useDashboardMetrics, useResetMetrics } from "#/hooks/use-metrics";
+import { formatWhen } from "#/lib/format-when";
+import type {
+	JobMode,
+	MetricsEvent,
+	MetricsItem,
 } from "#/services/storage.services";
 
 export const Route = createFileRoute("/dashboard/analytics")({
 	component: AnalyticsPage,
 });
-
-function formatWhen(at: number) {
-	try {
-		return new Intl.DateTimeFormat("id-ID", {
-			dateStyle: "medium",
-			timeStyle: "short",
-		}).format(new Date(at));
-	} catch {
-		return new Date(at).toLocaleString();
-	}
-}
 
 function eventTone(type: MetricsEvent["type"]) {
 	if (type === "job_done" || type === "connect_success") {
@@ -50,12 +38,8 @@ function eventTone(type: MetricsEvent["type"]) {
 
 function AnalyticsPage() {
 	const navigate = useNavigate();
-	const [tick, setTick] = useState(0);
-	const metrics = useMemo(() => getDashboardMetrics(), [tick]);
-
-	useEffect(() => {
-		return subscribeMetrics(() => setTick((n) => n + 1));
-	}, []);
+	const { data: metrics, refetch, isFetching } = useDashboardMetrics();
+	const resetMetrics = useResetMetrics();
 
 	const maxRemoved = Math.max(
 		1,
@@ -68,14 +52,15 @@ function AnalyticsPage() {
 				<div>
 					<h2 className="text-xl font-bold text-slate-800">Analytics</h2>
 					<p className="mt-1 text-sm text-slate-400">
-						Statistik lokal dari localStorage — hapus repost / like / favorite
-						& connect akun.
+						Statistik lokal dari localStorage — hapus repost / like / favorite &
+						connect akun.
 					</p>
 				</div>
 				<div className="flex flex-wrap gap-2">
 					<Button
 						variant="outline"
-						onClick={() => setTick((n) => n + 1)}
+						onClick={() => void refetch()}
+						disabled={isFetching}
 					>
 						<RefreshCw className="h-4 w-4" />
 						Refresh
@@ -87,10 +72,10 @@ function AnalyticsPage() {
 								typeof window !== "undefined" &&
 								window.confirm("Reset semua statistik lokal?")
 							) {
-								resetMetrics();
-								setTick((n) => n + 1);
+								resetMetrics.mutate();
 							}
 						}}
+						disabled={resetMetrics.isPending}
 					>
 						Reset metrics
 					</Button>
@@ -131,8 +116,7 @@ function AnalyticsPage() {
 						{metrics.last7Days.map((day) => {
 							const total = day.removed + day.failed;
 							const h = Math.round((total / maxRemoved) * 100);
-							const okH =
-								total > 0 ? Math.round((day.removed / total) * h) : 0;
+							const okH = total > 0 ? Math.round((day.removed / total) * h) : 0;
 							const label = day.date.slice(5);
 							return (
 								<div
@@ -262,8 +246,7 @@ function ItemCard({ item }: { item: MetricsItem }) {
 	const handle = item.author?.startsWith("@")
 		? item.author
 		: `@${item.author || "unknown"}`;
-	const desc =
-		(item.description || "").trim() || "Tanpa deskripsi";
+	const desc = (item.description || "").trim() || "Tanpa deskripsi";
 
 	const body = (
 		<>

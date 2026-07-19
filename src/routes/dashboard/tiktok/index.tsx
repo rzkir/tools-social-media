@@ -8,26 +8,21 @@ import {
 	ThumbsUp,
 	UserRound,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { ProgressMetric } from "#/components/ui/chart";
-import { pingExtension } from "#/lib/extension-bridge";
-import { hasSavedAccount, loadCookieSession } from "#/lib/session-store";
+import { useExtensionInstalled } from "#/hooks/use-extension";
+import { useCookieSession } from "#/hooks/use-session";
+import { hasSavedAccount } from "#/lib/session-store";
 
 export const Route = createFileRoute("/dashboard/tiktok/")({
 	component: TikTokOverviewPage,
 });
 
 function TikTokOverviewPage() {
-	const [username, setUsername] = useState("");
-	const [hasAccount, setHasAccount] = useState(false);
-	const [extOk, setExtOk] = useState(false);
+	const { data: session } = useCookieSession();
+	const { data: extOk = false } = useExtensionInstalled();
 
-	useEffect(() => {
-		const stored = loadCookieSession();
-		setHasAccount(hasSavedAccount(stored));
-		setUsername(stored?.cookies.username || stored?.user?.uniqueId || "");
-		void pingExtension().then(setExtOk);
-	}, []);
+	const hasAccount = hasSavedAccount(session);
+	const username = session?.cookies.username || session?.user?.uniqueId || "";
 
 	return (
 		<div className="space-y-6 pb-4">

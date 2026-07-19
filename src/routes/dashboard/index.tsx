@@ -7,7 +7,7 @@ import {
 	Trash2,
 	XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
+import { type ReactNode, type RefObject, useState } from "react";
 import { DashboardAside } from "#/components/ui/aside";
 import {
 	FollowersLineChart,
@@ -15,6 +15,7 @@ import {
 	SparklineChart,
 } from "#/components/ui/chart";
 import { Progress } from "#/components/ui/progres";
+import { useDashboardMetrics } from "#/hooks/use-metrics";
 import {
 	fadeUp,
 	inViewProps,
@@ -23,44 +24,18 @@ import {
 	useInViewOnce,
 	useReducedMotion,
 } from "#/lib/animation";
-import {
-	getDashboardMetrics,
-	subscribeMetrics,
-	type DashboardMetricsView,
-	type MetricsItem,
-} from "#/services/storage.services";
+import { formatWhen } from "#/lib/format-when";
+import type { MetricsItem } from "#/services/storage.services";
 
 export const Route = createFileRoute("/dashboard/")({
 	component: DashboardPage,
 });
 
-function useLiveMetrics(): DashboardMetricsView {
-	const [tick, setTick] = useState(0);
-	const metrics = useMemo(() => getDashboardMetrics(), [tick]);
-
-	useEffect(() => {
-		return subscribeMetrics(() => setTick((n) => n + 1));
-	}, []);
-
-	return metrics;
-}
-
-function formatWhen(at: number) {
-	try {
-		return new Intl.DateTimeFormat("id-ID", {
-			dateStyle: "medium",
-			timeStyle: "short",
-		}).format(new Date(at));
-	} catch {
-		return new Date(at).toLocaleString();
-	}
-}
-
 function DashboardPage() {
 	const reduce = useReducedMotion();
 	const view = inViewProps(reduce);
 	const { ref: heroRef, inView: heroInView } = useInViewOnce(0.3);
-	const metrics = useLiveMetrics();
+	const { data: metrics } = useDashboardMetrics();
 
 	const removedAnim = useAnimatedNumber(
 		metrics.removed,
@@ -117,9 +92,7 @@ function DashboardPage() {
 							</h3>
 							<p className="mb-4 text-xs text-slate-500">
 								Update otomatis setelah job / connect.
-								{metrics.updatedAt
-									? ` · ${formatWhen(metrics.updatedAt)}`
-									: ""}
+								{metrics.updatedAt ? ` · ${formatWhen(metrics.updatedAt)}` : ""}
 							</p>
 							<Link
 								to="/dashboard/analytics"

@@ -1,17 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AccountsDialog } from "#/components/dialog/accounts.dialog";
 import { AccountCard } from "#/components/ui/card";
 import { Empty } from "#/components/ui/empaty";
+import { useClearCookieSession, useCookieSession } from "#/hooks/use-session";
 import {
 	type AccountBridge,
 	type AccountPlatform,
 	bridgeLabel,
-	clearCookieSession,
-	loadCookieSession,
 } from "#/lib/session-store";
-import type { TikTokUser } from "#/types/tiktok";
 
 export const Route = createFileRoute("/dashboard/accounts")({
 	component: AccountsPage,
@@ -19,24 +17,15 @@ export const Route = createFileRoute("/dashboard/accounts")({
 
 function AccountsPage() {
 	const [dialogOpen, setDialogOpen] = useState(false);
-	const [user, setUser] = useState<TikTokUser | null>(null);
-	const [platform, setPlatform] = useState<AccountPlatform>("tiktok");
-	const [bridge, setBridge] = useState<AccountBridge>("cookie");
+	const { data: session } = useCookieSession();
+	const clearSession = useClearCookieSession();
 
-	useEffect(() => {
-		const stored = loadCookieSession();
-		if (stored?.user) {
-			setUser(stored.user);
-			setPlatform(stored.platform);
-			setBridge(stored.bridge);
-		}
-	}, []);
+	const user = session?.user ?? null;
+	const platform: AccountPlatform = session?.platform ?? "tiktok";
+	const bridge: AccountBridge = session?.bridge ?? "cookie";
 
 	const onClearSession = () => {
-		clearCookieSession();
-		setUser(null);
-		setPlatform("tiktok");
-		setBridge("cookie");
+		clearSession.mutate({ recordMetrics: true });
 	};
 
 	const connectedCount = user ? 1 : 0;
@@ -110,15 +99,7 @@ function AccountsPage() {
 				)}
 			</div>
 
-			<AccountsDialog
-				open={dialogOpen}
-				onOpenChange={setDialogOpen}
-				onConnected={(payload) => {
-					setUser(payload.user);
-					setPlatform(payload.platform);
-					setBridge(payload.bridge);
-				}}
-			/>
+			<AccountsDialog open={dialogOpen} onOpenChange={setDialogOpen} />
 		</>
 	);
 }

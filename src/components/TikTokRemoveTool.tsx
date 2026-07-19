@@ -11,15 +11,11 @@ import { Field, FieldLabel } from "#/components/ui/field";
 import { useMinimizeOptional } from "#/context/MinimizeContext";
 import { useNotificationOptional } from "#/context/NotificationContext";
 import {
-	pingExtension,
-	startExtensionJob,
-	stopExtensionJob,
-} from "#/lib/extension-bridge";
-import {
-	hasSavedAccount,
-	loadCookieSession,
-	saveCookieSession,
-} from "#/lib/session-store";
+	useExtensionInstalled,
+	useStartExtensionJob,
+} from "#/hooks/use-extension";
+import { useCookieSession, useSaveCookieSession } from "#/hooks/use-session";
+import { hasSavedAccount } from "#/lib/session-store";
 import type { TikTokUser } from "#/types/tiktok";
 
 export type RemoveToolMode = "repost" | "favorite" | "like";
@@ -87,46 +83,42 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	const minimizeCtx = useMinimizeOptional();
 	const notify = useNotificationOptional();
 	const statusAlert = useAlertStatus();
-	const extInstalled = minimizeCtx?.extInstalled ?? false;
+	const { data: session, isLoading: sessionLoading } = useCookieSession();
+	const {
+		data: queryExtOk = false,
+		isFetching: extFetching,
+		refetch: refetchExt,
+	} = useExtensionInstalled();
+	const startJob = useStartExtensionJob();
+	const saveSession = useSaveCookieSession();
+
+	const extInstalled = minimizeCtx?.extInstalled ?? queryExtOk;
 	const running = minimizeCtx?.running ?? false;
 	const job = minimizeCtx?.job ?? null;
 	const hasProgress = minimizeCtx?.hasProgress ?? false;
 	const openProgress = minimizeCtx?.openProgress;
 	const expand = minimizeCtx?.expand;
-	const stopJob = minimizeCtx?.stopJob ?? (() => stopExtensionJob());
+	const stopJob = minimizeCtx?.stopJob;
 	const [cookieValues, setCookieValues] =
 		useState<TikTokCookieValues>(EMPTY_COOKIE_VALUES);
 	const [user, setUser] = useState<TikTokUser | null>(null);
 	const [speed, setSpeed] = useState<SpeedMode>("normal");
-	const [booting, setBooting] = useState(true);
-	const [extChecking, setExtChecking] = useState(true);
-	const [localExtOk, setLocalExtOk] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [showFallback, setShowFallback] = useState(false);
 	const [editAccount, setEditAccount] = useState(false);
+	const [hydrated, setHydrated] = useState(false);
 
 	useEffect(() => {
-		const stored = loadCookieSession();
-		if (stored) {
-			setCookieValues(stored.cookies);
-			setUser(stored.user);
-			setEditAccount(!hasSavedAccount(stored));
+		if (sessionLoading) return;
+		if (session) {
+			setCookieValues(session.cookies);
+			setUser(session.user);
+			setEditAccount(!hasSavedAccount(session));
 		} else {
 			setEditAccount(true);
 		}
-		setBooting(false);
-
-		void (async () => {
-			setExtChecking(true);
-			const ok = await pingExtension();
-			setLocalExtOk(ok);
-			setExtChecking(false);
-		})();
-	}, []);
-
-	useEffect(() => {
-		setLocalExtOk(extInstalled);
-	}, [extInstalled]);
+		setHydrated(true);
+	}, [session, sessionLoading]);
 
 	const persist = (
 		nextCookies: TikTokCookieValues,
@@ -134,14 +126,15 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	) => {
 		setCookieValues(nextCookies);
 		if (nextUser) setUser(nextUser);
-		saveCookieSession(nextCookies, nextUser);
+		saveSession.mutate({ cookies: nextCookies, user: nextUser });
 	};
 
 	const username = cookieValues.username || user?.uniqueId || "";
 	const secUid = cookieValues.secUid || user?.secUid || "";
 	const displayName = user?.nickname || username;
 	const hasAccount = Boolean(username.trim());
-	const extensionOk = localExtOk || extInstalled;
+	const extensionOk = queryExtOk || extInstalled;
+	const extChecking = !hydrated || (extFetching && !extensionOk);
 	const thisJobRunning = running && job?.mode === mode;
 	const showProgressActions = Boolean(job) || hasProgress;
 
@@ -149,8 +142,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 		setError(null);
 		const handle = username.trim().replace(/^@/, "");
 		if (!handle) {
-			const msg =
-				"Belum ada akun. Isi username atau hubungkan di Accounts.";
+			const msg = "Belum ada akun. Isi username atau hubungkan di Accounts.";
 			setError(msg);
 			notify?.warning(msg, { title: "Akun diperlukan" });
 			statusAlert.warning(
@@ -161,8 +153,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 			return;
 		}
 		if (!extensionOk) {
-			const msg =
-				"Ekstensi belum terpasang. Install dulu, lalu Cek Ulang.";
+			const msg = "Ekstensi belum terpasang. Install dulu, lalu Cek Ulang.";
 			setError(msg);
 			notify?.warning(msg, { title: "Ekstensi" });
 			statusAlert.warning(
@@ -178,7 +169,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 			modeLabel: copy.title,
 			listingWord: copy.listingWord,
 		});
-		const result = await startExtensionJob({
+		const result = await startJob.mutateAsync({
 			uniqueId: handle,
 			secUid: secUid.trim() || undefined,
 			delayMs: SPEED_DELAY_MS[speed],
@@ -201,13 +192,9 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	};
 
 	const onRecheck = async () => {
-		setExtChecking(true);
-		const ok = await pingExtension();
-		setLocalExtOk(ok);
-		setExtChecking(false);
+		const { data: ok } = await refetchExt();
 		if (!ok) {
-			const msg =
-				"Ekstensi belum terdeteksi. Ikuti langkah instal di bawah.";
+			const msg = "Ekstensi belum terdeteksi. Ikuti langkah instal di bawah.";
 			setError(msg);
 			notify?.error(msg, { title: "Ekstensi" });
 			statusAlert.error(
@@ -224,7 +211,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 		}
 	};
 
-	if (booting) {
+	if (!hydrated || sessionLoading) {
 		return (
 			<section className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
 				<p className="m-0 text-sm text-slate-400">Memulihkan session…</p>
@@ -441,7 +428,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 
 							{thisJobRunning ? (
 								<>
-									<Button variant="danger" onClick={() => void stopJob()}>
+									<Button variant="danger" onClick={() => void stopJob?.()}>
 										Stop
 									</Button>
 									{expand ? (

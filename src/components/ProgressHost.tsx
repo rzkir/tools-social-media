@@ -3,10 +3,8 @@ import { TikTokProgressDialog } from "#/components/dialog/tiktok-progres.dialog"
 import { MinimizedProgressDock } from "#/components/MinimizedProgressDock";
 import { useMinimize } from "#/context/MinimizeContext";
 import { useNotificationOptional } from "#/context/NotificationContext";
-import {
-	type MetricsItemInput,
-	recordJobResult,
-} from "#/services/storage.services";
+import { useRecordJobResult } from "#/hooks/use-metrics";
+import type { MetricsItemInput } from "#/services/storage.services";
 
 function canMinimize(status: string | undefined, running: boolean) {
 	// Keep dialog open when waiting for delete limit
@@ -34,6 +32,7 @@ export function ProgressHost() {
 		confirmRemove,
 	} = useMinimize();
 	const notify = useNotificationOptional();
+	const recordJob = useRecordJobResult();
 	const lastStatusRef = useRef<string | null>(null);
 	const lastCountsRef = useRef({ done: 0, failed: 0 });
 	const collectedItemsRef = useRef<MetricsItemInput[]>([]);
@@ -107,7 +106,7 @@ export function ProgressHost() {
 			return;
 		}
 		if (status === "done" || status === "stopped" || status === "error") {
-			recordJobResult({
+			recordJob.mutate({
 				mode: job.mode,
 				status,
 				removed: progress?.done ?? 0,
@@ -139,7 +138,7 @@ export function ProgressHost() {
 				durationMs: 7000,
 			});
 		}
-	}, [job, extState, notify]);
+	}, [job, extState, notify, recordJob]);
 
 	useEffect(() => {
 		if (!job) {

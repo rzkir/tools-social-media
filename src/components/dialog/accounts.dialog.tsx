@@ -1,5 +1,5 @@
 import { Cookie, Globe, Instagram, Music2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BrowserScriptPanel } from "#/components/BrowserScriptPanel";
 import { useAlertStatus } from "#/components/dialog/alert-status.dialog";
 import {
@@ -13,17 +13,13 @@ import { Dialog } from "#/components/ui/dialog";
 import { Field, FieldLabel } from "#/components/ui/field";
 import { TabsNavigation } from "#/components/ui/tabs-navigation";
 import {
-	type AccountBridge,
-	type AccountPlatform,
-	clearCookieSession,
-	loadCookieSession,
-	saveCookieSession,
-} from "#/lib/session-store";
-import { verifySessionFn } from "#/server/tiktok.functions";
-import {
-	recordConnectResult,
-	recordSessionCleared,
-} from "#/services/storage.services";
+	useClearCookieSession,
+	useCookieSession,
+	useRecordConnect,
+	useSaveCookieSession,
+} from "#/hooks/use-session";
+import { useVerifySession } from "#/hooks/use-tiktok";
+import type { AccountBridge, AccountPlatform } from "#/lib/session-store";
 import type { TikTokUser } from "#/types/tiktok";
 
 type ConnectMode = "cookie" | "browser";
@@ -61,44 +57,60 @@ export function AccountsDialog({
 	const [igUsername, setIgUsername] = useState("");
 	const [igCookie, setIgCookie] = useState("");
 	const [user, setUser] = useState<TikTokUser | null>(null);
-	const [busy, setBusy] = useState<"idle" | "verify" | "load" | "remove">(
-		"idle",
-	);
 	const [speed, setSpeed] = useState<SpeedMode>("safe");
-	const [booting, setBooting] = useState(true);
-	const hydratedRef = useRef(false);
+	const [hydrated, setHydrated] = useState(false);
 	const statusAlert = useAlertStatus();
+
+	const { data: session, isLoading: sessionLoading } = useCookieSession();
+	const saveSession = useSaveCookieSession();
+	const clearSession = useClearCookieSession();
+	const verifySession = useVerifySession();
+	const recordConnect = useRecordConnect();
 
 	const cookies = useMemo(
 		() => buildCookieHeader(cookieValues),
 		[cookieValues],
 	);
 
-	useEffect(() => {
-		if (!open) return;
-		const stored = loadCookieSession();
-		if (stored) {
-			setCookieValues(stored.cookies);
-			setUser(stored.user);
-			setPlatform(stored.platform);
-			setMode(stored.bridge === "browser" ? "browser" : "cookie");
-			if (stored.platform === "instagram") {
-				setIgUsername(stored.user?.uniqueId || stored.cookies.username || "");
-				setIgCookie(stored.cookies.sessionid || "");
-			}
-		}
-		hydratedRef.current = true;
-		setBooting(false);
-	}, [open]);
+	const busy = verifySession.isPending
+		? "verify"
+		: clearSession.isPending
+			? "load"
+			: "idle";
 
 	useEffect(() => {
-		if (!hydratedRef.current) return;
+		if (!open) {
+			setHydrated(false);
+			return;
+		}
+		if (hydrated || sessionLoading) return;
+		if (session) {
+			setCookieValues(session.cookies);
+			setUser(session.user);
+			setPlatform(session.platform);
+			setMode(session.bridge === "browser" ? "browser" : "cookie");
+			if (session.platform === "instagram") {
+				setIgUsername(session.user?.uniqueId || session.cookies.username || "");
+				setIgCookie(session.cookies.sessionid || "");
+			}
+		}
+		setHydrated(true);
+	}, [open, session, sessionLoading, hydrated]);
+
+	useEffect(() => {
+		if (!hydrated || !open) return;
 		if (platform !== "tiktok") return;
-		saveCookieSession(cookieValues, user, {
-			platform: "tiktok",
-			bridge: mode === "browser" ? "browser" : "cookie",
+		saveSession.mutate({
+			cookies: cookieValues,
+			user,
+			meta: {
+				platform: "tiktok",
+				bridge: mode === "browser" ? "browser" : "cookie",
+			},
 		});
-	}, [cookieValues, user, platform, mode]);
+		// Draft persist — omit saveSession from deps to avoid re-fire loops
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [cookieValues, user, platform, mode, hydrated, open]);
 
 	const emitConnected = (
 		nextUser: TikTokUser | null,
@@ -112,69 +124,55 @@ export function AccountsDialog({
 		});
 	};
 
-	const onVerify = async () => {
-		setBusy("verify");
-		try {
-			const result = await verifySessionFn({
-				data: {
-					cookies,
-					uniqueId: cookieValues.username.trim() || undefined,
-					secUid: cookieValues.secUid.trim() || undefined,
+	const onVerify = () => {
+		verifySession.mutate(
+			{
+				cookies,
+				uniqueId: cookieValues.username.trim() || undefined,
+				secUid: cookieValues.secUid.trim() || undefined,
+				cookieValues,
+			},
+			{
+				onSuccess: (result) => {
+					setCookieValues(result.cookieValues);
+					setUser(result.user);
+					emitConnected(result.user, "tiktok", "cookie");
+					statusAlert.success(
+						"Akun terhubung",
+						`Berhasil connect @${result.user.uniqueId}.`,
+					);
+					onOpenChange(false);
 				},
-			});
-			if (!result?.ok) {
-				const message =
-					result && "error" in result
-						? result.error
-						: "Server error. Coba refresh halaman.";
-				recordConnectResult({ ok: false, platform: "tiktok", error: message });
-				statusAlert.error("Verifikasi gagal", message);
-				return;
-			}
-
-			const nextCookies: TikTokCookieValues = {
-				...cookieValues,
-				username: result.user.uniqueId,
-				secUid: result.user.secUid,
-			};
-			setCookieValues(nextCookies);
-			setUser(result.user);
-			saveCookieSession(nextCookies, result.user, {
-				platform: "tiktok",
-				bridge: "cookie",
-			});
-			emitConnected(result.user, "tiktok", "cookie");
-			recordConnectResult({
-				ok: true,
-				platform: "tiktok",
-				username: result.user.uniqueId,
-			});
-			statusAlert.success(
-				"Akun terhubung",
-				`Berhasil connect @${result.user.uniqueId}.`,
-			);
-			onOpenChange(false);
-		} catch (err) {
-			const message =
-				err instanceof Error ? err.message : "Gagal verifikasi";
-			recordConnectResult({ ok: false, platform: "tiktok", error: message });
-			statusAlert.error("Verifikasi gagal", message);
-		} finally {
-			setBusy("idle");
-		}
+				onError: (err) => {
+					statusAlert.error(
+						"Verifikasi gagal",
+						err instanceof Error ? err.message : "Gagal verifikasi",
+					);
+				},
+			},
+		);
 	};
 
 	const onClearSession = () => {
-		clearCookieSession();
-		setCookieValues(EMPTY_COOKIE_VALUES);
-		setUser(null);
-		setIgUsername("");
-		setIgCookie("");
-		emitConnected(null, platform, mode === "browser" ? "browser" : "cookie");
-		recordSessionCleared();
-		statusAlert.info(
-			"Session dihapus",
-			"Cookie & profil akun sudah dibersihkan.",
+		clearSession.mutate(
+			{ recordMetrics: true },
+			{
+				onSuccess: () => {
+					setCookieValues(EMPTY_COOKIE_VALUES);
+					setUser(null);
+					setIgUsername("");
+					setIgCookie("");
+					emitConnected(
+						null,
+						platform,
+						mode === "browser" ? "browser" : "cookie",
+					);
+					statusAlert.info(
+						"Session dihapus",
+						"Cookie & profil akun sudah dibersihkan.",
+					);
+				},
+			},
 		);
 	};
 
@@ -194,23 +192,30 @@ export function AccountsDialog({
 			nickname: username,
 			avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(username)}`,
 		};
-		setCookieValues(next);
-		setUser(nextUser);
-		saveCookieSession(next, nextUser, {
-			platform: "tiktok",
-			bridge: "browser",
-		});
-		emitConnected(nextUser, "tiktok", "browser");
-		recordConnectResult({
-			ok: true,
-			platform: "tiktok",
-			username,
-		});
-		statusAlert.success(
-			"Profil disimpan",
-			`Script Browser siap untuk @${username}.`,
+		saveSession.mutate(
+			{
+				cookies: next,
+				user: nextUser,
+				meta: { platform: "tiktok", bridge: "browser" },
+			},
+			{
+				onSuccess: () => {
+					setCookieValues(next);
+					setUser(nextUser);
+					emitConnected(nextUser, "tiktok", "browser");
+					recordConnect.mutate({
+						ok: true,
+						platform: "tiktok",
+						username,
+					});
+					statusAlert.success(
+						"Profil disimpan",
+						`Script Browser siap untuk @${username}.`,
+					);
+					onOpenChange(false);
+				},
+			},
 		);
-		onOpenChange(false);
 	};
 
 	const onSaveInstagram = () => {
@@ -237,24 +242,33 @@ export function AccountsDialog({
 			nickname: username,
 			avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`,
 		};
-		setCookieValues(nextCookies);
-		setUser(nextUser);
-		saveCookieSession(nextCookies, nextUser, {
-			platform: "instagram",
-			bridge: "cookie",
-		});
-		emitConnected(nextUser, "instagram", "cookie");
-		recordConnectResult({
-			ok: true,
-			platform: "instagram",
-			username,
-		});
-		statusAlert.success(
-			"Instagram tersimpan",
-			`Cookie @${username} berhasil disimpan.`,
+		saveSession.mutate(
+			{
+				cookies: nextCookies,
+				user: nextUser,
+				meta: { platform: "instagram", bridge: "cookie" },
+			},
+			{
+				onSuccess: () => {
+					setCookieValues(nextCookies);
+					setUser(nextUser);
+					emitConnected(nextUser, "instagram", "cookie");
+					recordConnect.mutate({
+						ok: true,
+						platform: "instagram",
+						username,
+					});
+					statusAlert.success(
+						"Instagram tersimpan",
+						`Cookie @${username} berhasil disimpan.`,
+					);
+					onOpenChange(false);
+				},
+			},
 		);
-		onOpenChange(false);
 	};
+
+	const booting = open && (sessionLoading || !hydrated);
 
 	return (
 		<>

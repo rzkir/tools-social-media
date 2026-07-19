@@ -400,21 +400,6 @@ export function recordSessionCleared(): MetricsSnapshot {
 	return persist(snap);
 }
 
-/** Optional: log alert popup outcomes into recent activity. */
-export function recordAlertEvent(input: {
-	status: "success" | "error" | "warning" | "info";
-	title: string;
-	description?: string;
-}): MetricsSnapshot {
-	const snap = loadMetrics();
-	snap.events = pushEvent(snap.events, {
-		type: "alert",
-		title: input.title,
-		detail: input.description,
-	});
-	return persist(snap);
-}
-
 export type DashboardMetricsView = {
 	removed: number;
 	failed: number;
