@@ -868,6 +868,20 @@ async function handleMessage(msg, sender) {
     return { ok: true, state };
   }
 
+  if (msg?.type === "SYNC_POPUP_DATA") {
+    const data =
+      msg.data && typeof msg.data === "object"
+        ? msg.data
+        : { metrics: null, session: null, syncedAt: Date.now() };
+    await chrome.storage.local.set({ rrPopupData: data });
+    return { ok: true };
+  }
+
+  if (msg?.type === "GET_POPUP_DATA") {
+    const { rrPopupData } = await chrome.storage.local.get(["rrPopupData"]);
+    return { ok: true, data: rrPopupData || null, state };
+  }
+
   if (msg?.type === "GET_TIKTOK_COOKIES") {
     try {
       const list = await chrome.cookies.getAll({ domain: "tiktok.com" });

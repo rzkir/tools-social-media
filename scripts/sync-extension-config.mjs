@@ -1,6 +1,7 @@
 /**
  * Sync extension dashboard URLs from PUBLIC_URL (.env.local / .env / process.env).
  */
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,5 +66,39 @@ if (tiktokScript) tiktokScript.matches = [...tiktokHosts];
 if (bridgeScript) bridgeScript.matches = [match];
 
 fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+const publicDir = path.join(root, "public");
+const zipPath = path.join(publicDir, "extension.zip");
+const extensionDir = path.join(root, "extension");
+fs.mkdirSync(publicDir, { recursive: true });
+if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+
+try {
+	if (process.platform === "win32") {
+		const psPath = zipPath.replace(/'/g, "''");
+		const psSrc = extensionDir.replace(/'/g, "''");
+		execFileSync(
+			"powershell",
+			[
+				"-NoProfile",
+				"-Command",
+				`Compress-Archive -Path '${psSrc}' -DestinationPath '${psPath}' -Force`,
+			],
+			{ stdio: "pipe" },
+		);
+	} else {
+		execFileSync(
+			"tar",
+			["-a", "-c", "-f", zipPath, "-C", root, "extension"],
+			{ stdio: "pipe" },
+		);
+	}
+	console.log(`Packed ${path.relative(root, zipPath)}`);
+} catch (err) {
+	console.warn(
+		"Could not pack public/extension.zip.",
+		err instanceof Error ? err.message : err,
+	);
+}
 
 console.log(`Synced extension PUBLIC_URL → ${publicUrl}`);

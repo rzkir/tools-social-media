@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { BrowserScriptPanel } from "#/components/BrowserScriptPanel";
 import { useAlertStatus } from "#/components/dialog/alert-status.dialog";
@@ -15,6 +16,10 @@ import {
 	useStartExtensionJob,
 } from "#/hooks/use-extension";
 import { useCookieSession, useSaveCookieSession } from "#/hooks/use-session";
+import {
+	downloadExtensionZip,
+	EXTENSION_INSTALL_HINT,
+} from "#/lib/extension-install";
 import { hasSavedAccount } from "#/lib/session-store";
 import type { TikTokUser } from "#/types/tiktok";
 
@@ -158,7 +163,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 			notify?.warning(msg, { title: "Ekstensi" });
 			statusAlert.warning(
 				"Ekstensi diperlukan",
-				"Pasang ekstensi Chrome (Load unpacked → folder extension), lalu klik Cek Ulang.",
+				"Klik Pasang Ekstensi, extract zip, jalankan INSTALL.bat, lalu Cek Ulang.",
 			);
 			return;
 		}
@@ -213,7 +218,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 
 	if (!hydrated || sessionLoading) {
 		return (
-			<section className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
+			<section className="rounded-4xl border border-slate-100 bg-white p-6 shadow-sm">
 				<p className="m-0 text-sm text-slate-400">Memulihkan session…</p>
 			</section>
 		);
@@ -221,7 +226,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 
 	return (
 		<div className="pb-4">
-			<section className="rise-in relative overflow-hidden rounded-[2rem] border border-slate-100 bg-white px-6 py-9 shadow-sm sm:px-10">
+			<section className="rise-in relative overflow-hidden rounded-4xl border border-slate-100 bg-white px-6 py-9 shadow-sm sm:px-10">
 				<div className="pointer-events-none absolute -top-24 -left-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.18),transparent_66%)]" />
 				<p className="mb-3 text-xs font-bold tracking-widest text-indigo-600 uppercase">
 					{copy.eyebrow}
@@ -234,7 +239,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 				</p>
 			</section>
 
-			<section className="mt-6 rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
+			<section className="mt-6 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm">
 				<div className="mb-5 flex flex-wrap items-center justify-between gap-3">
 					<div>
 						<p className="mb-1 text-xs font-bold tracking-widest text-indigo-600 uppercase">
@@ -261,27 +266,25 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 
 				{!extensionOk ? (
 					<div className="space-y-3 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4 text-sm text-orange-900">
-						<p className="m-0 font-semibold">Install sekali (Load unpacked)</p>
-						<ol className="m-0 list-decimal space-y-2 pl-5">
-							<li>
-								Pakai <strong>Google Chrome</strong> atau <strong>Edge</strong>
-							</li>
-							<li>
-								Buka{" "}
-								<code className="rounded bg-white px-1 font-mono text-xs">
-									chrome://extensions
-								</code>
-							</li>
-							<li>Aktifkan Developer mode</li>
-							<li>
-								Load unpacked → folder{" "}
-								<code className="rounded bg-white px-1 font-mono text-xs">
-									extension
-								</code>
-							</li>
-							<li>Hard refresh halaman ini → Cek Ulang</li>
-						</ol>
+						<p className="m-0 font-semibold">Pasang ekstensi (sekali saja)</p>
+						<p className="m-0 text-orange-800">
+							Klik <strong>Pasang Ekstensi</strong> → extract zip → double-klik{" "}
+							<code className="rounded bg-white px-1 font-mono text-xs">
+								INSTALL.bat
+							</code>{" "}
+							(path tersalin otomatis + buka chrome://extensions) → Developer
+							mode → Load unpacked → Ctrl+V.
+						</p>
 						<div className="flex flex-wrap gap-2 pt-1">
+							<Button
+								onClick={() => {
+									downloadExtensionZip();
+									statusAlert.info("Pasang Ekstensi", EXTENSION_INSTALL_HINT);
+								}}
+							>
+								<Download className="h-4 w-4" />
+								Pasang Ekstensi
+							</Button>
 							<Button variant="secondary" onClick={() => void onRecheck()}>
 								Cek Ulang
 							</Button>
@@ -363,7 +366,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 											}}
 											placeholder="rzkir.20"
 											disabled={thisJobRunning}
-											className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-indigo-600"
+											className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 ring-1 ring-slate-200 outline-none"
 										/>
 									</label>
 									<label className="block">
@@ -389,7 +392,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 											}}
 											placeholder="MS4wLjABAAAA…"
 											disabled={thisJobRunning}
-											className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 font-mono text-xs text-slate-900 ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-indigo-600"
+											className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 font-mono text-xs text-slate-900 ring-1 ring-slate-200 outline-none"
 										/>
 									</label>
 								</div>
@@ -418,7 +421,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 									value={speed}
 									onChange={(e) => setSpeed(e.target.value as SpeedMode)}
 									disabled={thisJobRunning}
-									className="mt-1 rounded-xl border-0 bg-white px-2 py-1.5 text-sm text-slate-800 ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-indigo-600"
+									className="mt-1 rounded-xl border-0 bg-white px-2 py-1.5 text-sm text-slate-800 ring-1 ring-slate-200 outline-none"
 								>
 									<option value="fast">Cepat (~0.8s)</option>
 									<option value="normal">Normal (~1.5s)</option>
@@ -481,7 +484,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 			</section>
 
 			{mode === "repost" && showFallback ? (
-				<section className="mt-6 rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
+				<section className="mt-6 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm">
 					<BrowserScriptPanel
 						variant="plain"
 						username={username}

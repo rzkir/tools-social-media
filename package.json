@@ -7,6 +7,7 @@
   },
   "scripts": {
     "sync:extension": "node scripts/sync-extension-config.mjs",
+    "extension:install": "node scripts/install-extension.mjs",
     "dev": "node scripts/sync-extension-config.mjs && vite dev --port 3000",
     "generate-routes": "tsr generate",
     "build": "node scripts/sync-extension-config.mjs && vite build",

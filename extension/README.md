@@ -1,24 +1,24 @@
-# Chrome Extension — Remove Repost TikTok
+# Chrome Extension — Remove TikTok
 
-Kontrol hapus repost dari **dashboard**, sementara request API jalan di tab TikTok yang sudah login (sama andalnya Console).
+Kontrol hapus repost / like / favorite dari **dashboard**, sementara request API jalan di tab TikTok yang sudah login.
 
-## Install (sekali)
+## Install cepat (disarankan)
 
-1. Buka **Google Chrome** atau **Edge** (bukan preview Cursor)
-2. Buka `chrome://extensions` (atau `edge://extensions`)
-3. Aktifkan **Developer mode**
-4. **Load unpacked** → pilih folder ini **persis**:
+### Dari dashboard
+1. Klik **Pasang Ekstensi** (unduh zip)
+2. Extract zip → double-klik **`INSTALL.bat`**
+3. Script menyalin path folder + membuka `chrome://extensions`
+4. Aktifkan **Developer mode** → **Load unpacked** → **Ctrl+V** → Enter
+5. Hard refresh dashboard → status **Connected**
 
-   `C:\Users\Administrator\Desktop\remove-repost-tiktok\extension`
-
-   Jangan pilih folder project (`remove-repost-tiktok`) atau `public`.
-5. Hard refresh dashboard (`Ctrl+Shift+R`) di `$PUBLIC_URL/dashboard/tiktok` (lihat `.env.local`)
-6. Status harus **Connected**, lalu **Start Hapus Repost**
-
-Kalau sudah pernah load versi lama: di `chrome://extensions` klik **Remove**, lalu Load unpacked lagi (versi 1.0.2).
+### Dari repo lokal
+```bash
+pnpm extension:install
+```
+Path folder `extension/` tersalin ke clipboard dan `chrome://extensions` terbuka otomatis. Lanjut Load unpacked → Ctrl+V.
 
 ## Catatan
 
+- Chrome tidak mengizinkan install unpacked 100% otomatis dari website (batasan keamanan)
 - Harus login di tiktok.com di browser yang sama
 - Progress tampil di dashboard + panel hitam di TikTok
-- Fallback tetap ada: Script Console di dashboard

@@ -1,6 +1,5 @@
-import { Cookie, Globe, Instagram, Music2 } from "lucide-react";
+import { Instagram, Music2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { BrowserScriptPanel } from "#/components/BrowserScriptPanel";
 import { useAlertStatus } from "#/components/dialog/alert-status.dialog";
 import {
 	buildCookieHeader,
@@ -22,17 +21,9 @@ import { useVerifySession } from "#/hooks/use-tiktok";
 import type { AccountBridge, AccountPlatform } from "#/lib/session-store";
 import type { TikTokUser } from "#/types/tiktok";
 
-type ConnectMode = "cookie" | "browser";
-type SpeedMode = "fast" | "normal" | "safe";
-
 const PLATFORM_TABS = [
 	{ id: "tiktok" as const, label: "TikTok", icon: Music2 },
 	{ id: "instagram" as const, label: "Instagram", icon: Instagram },
-];
-
-const CONNECT_TABS = [
-	{ id: "cookie" as const, label: "Cookie", icon: Cookie },
-	{ id: "browser" as const, label: "Script Browser", icon: Globe },
 ];
 
 export type AccountsDialogProps = {
@@ -51,13 +42,11 @@ export function AccountsDialog({
 	onConnected,
 }: AccountsDialogProps) {
 	const [platform, setPlatform] = useState<AccountPlatform>("tiktok");
-	const [mode, setMode] = useState<ConnectMode>("cookie");
 	const [cookieValues, setCookieValues] =
 		useState<TikTokCookieValues>(EMPTY_COOKIE_VALUES);
 	const [igUsername, setIgUsername] = useState("");
 	const [igCookie, setIgCookie] = useState("");
 	const [user, setUser] = useState<TikTokUser | null>(null);
-	const [speed, setSpeed] = useState<SpeedMode>("safe");
 	const [hydrated, setHydrated] = useState(false);
 	const statusAlert = useAlertStatus();
 
@@ -88,7 +77,6 @@ export function AccountsDialog({
 			setCookieValues(session.cookies);
 			setUser(session.user);
 			setPlatform(session.platform);
-			setMode(session.bridge === "browser" ? "browser" : "cookie");
 			if (session.platform === "instagram") {
 				setIgUsername(session.user?.uniqueId || session.cookies.username || "");
 				setIgCookie(session.cookies.sessionid || "");
@@ -105,12 +93,12 @@ export function AccountsDialog({
 			user,
 			meta: {
 				platform: "tiktok",
-				bridge: mode === "browser" ? "browser" : "cookie",
+				bridge: "cookie",
 			},
 		});
 		// Draft persist — omit saveSession from deps to avoid re-fire loops
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [cookieValues, user, platform, mode, hydrated, open]);
+	}, [cookieValues, user, platform, hydrated, open]);
 
 	const emitConnected = (
 		nextUser: TikTokUser | null,
@@ -162,57 +150,11 @@ export function AccountsDialog({
 					setUser(null);
 					setIgUsername("");
 					setIgCookie("");
-					emitConnected(
-						null,
-						platform,
-						mode === "browser" ? "browser" : "cookie",
-					);
+					emitConnected(null, platform, "cookie");
 					statusAlert.info(
 						"Session dihapus",
 						"Cookie & profil akun sudah dibersihkan.",
 					);
-				},
-			},
-		);
-	};
-
-	const onSaveBrowserProfile = () => {
-		const username = cookieValues.username.trim().replace(/^@/, "");
-		if (!username) {
-			statusAlert.warning("Username wajib", "Isi username TikTok dulu.");
-			return;
-		}
-		const next: TikTokCookieValues = {
-			...cookieValues,
-			username,
-		};
-		const nextUser: TikTokUser = {
-			uniqueId: username,
-			secUid: cookieValues.secUid.trim(),
-			nickname: username,
-			avatarUrl: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(username)}`,
-		};
-		saveSession.mutate(
-			{
-				cookies: next,
-				user: nextUser,
-				meta: { platform: "tiktok", bridge: "browser" },
-			},
-			{
-				onSuccess: () => {
-					setCookieValues(next);
-					setUser(nextUser);
-					emitConnected(nextUser, "tiktok", "browser");
-					recordConnect.mutate({
-						ok: true,
-						platform: "tiktok",
-						username,
-					});
-					statusAlert.success(
-						"Profil disimpan",
-						`Script Browser siap untuk @${username}.`,
-					);
-					onOpenChange(false);
 				},
 			},
 		);
@@ -276,26 +218,14 @@ export function AccountsDialog({
 				open={open}
 				onOpenChange={onOpenChange}
 				title="Connect Account"
-				description="Pilih platform, lalu hubungkan lewat cookie TikTok / Instagram atau Script Browser."
+				description="Pilih platform, lalu hubungkan lewat cookie TikTok atau Instagram."
 			>
 				<TabsNavigation
 					className="mb-4"
 					items={PLATFORM_TABS}
 					value={platform}
-					onValueChange={(next) => {
-						setPlatform(next);
-						if (next === "instagram") setMode("cookie");
-					}}
+					onValueChange={setPlatform}
 				/>
-
-				{platform === "tiktok" ? (
-					<TabsNavigation
-						className="mb-5"
-						items={CONNECT_TABS}
-						value={mode}
-						onValueChange={setMode}
-					/>
-				) : null}
 
 				{booting ? (
 					<p className="text-sm text-slate-400">Memulihkan session…</p>
@@ -314,7 +244,7 @@ export function AccountsDialog({
 								value={igUsername}
 								onChange={(e) => setIgUsername(e.target.value)}
 								placeholder="username"
-								className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-indigo-600"
+								className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 ring-1 ring-slate-200 outline-none"
 							/>
 						</Field>
 						<Field>
@@ -327,7 +257,7 @@ export function AccountsDialog({
 								onChange={(e) => setIgCookie(e.target.value)}
 								placeholder="sessionid=…; ds_user_id=…; csrftoken=…"
 								rows={4}
-								className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 font-mono text-xs text-slate-900 ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-indigo-600"
+								className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 font-mono text-xs text-slate-900 ring-1 ring-slate-200 outline-none"
 							/>
 						</Field>
 						<div className="flex flex-wrap gap-2">
@@ -341,7 +271,7 @@ export function AccountsDialog({
 							) : null}
 						</div>
 					</div>
-				) : mode === "cookie" ? (
+				) : (
 					<TikTokCookieForm
 						variant="plain"
 						values={cookieValues}
@@ -352,25 +282,6 @@ export function AccountsDialog({
 						user={user}
 						error={null}
 					/>
-				) : (
-					<div className="space-y-4">
-						<BrowserScriptPanel
-							variant="plain"
-							username={cookieValues.username}
-							secUid={cookieValues.secUid}
-							onUsernameChange={(username) =>
-								setCookieValues((prev) => ({ ...prev, username }))
-							}
-							onSecUidChange={(secUid) =>
-								setCookieValues((prev) => ({ ...prev, secUid }))
-							}
-							speed={speed}
-							onSpeedChange={setSpeed}
-						/>
-						<Button onClick={onSaveBrowserProfile} size="lg">
-							Simpan Profil & Tutup
-						</Button>
-					</div>
 				)}
 			</Dialog>
 			{statusAlert.dialog}

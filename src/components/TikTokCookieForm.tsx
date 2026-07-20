@@ -1,4 +1,4 @@
-import { Cookie } from "lucide-react";
+import { Cookie, Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import {
@@ -14,6 +14,10 @@ import {
 	useFetchTikTokCookies,
 } from "#/hooks/use-extension";
 import { hasExtensionMarker } from "#/lib/extension-bridge";
+import {
+	downloadExtensionZip,
+	EXTENSION_INSTALL_HINT,
+} from "#/lib/extension-install";
 import type { TikTokUser } from "#/types/tiktok";
 
 export type TikTokCookieValues = {
@@ -158,6 +162,11 @@ export function TikTokCookieForm({
 		Boolean(values.username.trim()) ||
 		Boolean(user);
 
+	const handle = values.username.trim().replace(/^@/, "");
+	const tiktokUrl = handle
+		? `https://www.tiktok.com/@${handle}`
+		: "https://www.tiktok.com";
+
 	const setField = <K extends keyof TikTokCookieValues>(
 		key: K,
 		value: TikTokCookieValues[K],
@@ -172,7 +181,7 @@ export function TikTokCookieForm({
 			const { data: pinged } = marker ? { data: true } : await refetchExt();
 			if (!marker && !pinged) {
 				setAutofillHint(
-					"Ekstensi Chrome belum terdeteksi. Pasang & aktifkan ekstensi Remove TikTok, lalu hard refresh (Ctrl+Shift+R).",
+					"Ekstensi belum terdeteksi. Klik Pasang Ekstensi, lalu hard refresh (Ctrl+Shift+R).",
 				);
 				return;
 			}
@@ -226,6 +235,11 @@ export function TikTokCookieForm({
 		})();
 	};
 
+	const onInstallExtension = () => {
+		downloadExtensionZip();
+		setAutofillHint(EXTENSION_INSTALL_HINT);
+	};
+
 	const body = (
 		<>
 			{variant === "card" ? (
@@ -239,20 +253,24 @@ export function TikTokCookieForm({
 					<p className="mt-1 text-sm text-slate-400">
 						Klik{" "}
 						<strong className="font-medium text-slate-600">
-							Ambil dari Browser
+							Pasang Ekstensi
 						</strong>{" "}
-						untuk isi otomatis (butuh ekstensi + login di tiktok.com), atau isi
-						manual. Minimal <code className="text-indigo-600">username</code> +{" "}
+						(sekali),{" "}
+						<strong className="font-medium text-slate-600">Buka TikTok</strong>{" "}
+						untuk login, lalu{" "}
+						<strong className="font-medium text-slate-600">
+							Ambil dari Browser
+						</strong>
+						. Minimal <code className="text-indigo-600">username</code> +{" "}
 						<code className="text-indigo-600">sessionid</code> +{" "}
 						<code className="text-indigo-600">msToken</code>.
 					</p>
 				</div>
 			) : (
 				<p className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
-					<strong>1.</strong> Buka profil TikTok kamu di tab lain:{" "}
-					<code className="text-indigo-700">tiktok.com/@username</code> (sudah
-					login). <strong>2.</strong> Kembali ke sini → isi username jika perlu
-					→ <strong>Ambil dari Browser</strong>. Cookie +{" "}
+					<strong>1.</strong> Klik <strong>Buka TikTok</strong> → login di tab
+					itu. <strong>2.</strong> Kembali ke sini → isi username jika perlu →{" "}
+					<strong>Ambil dari Browser</strong>. Cookie +{" "}
 					<code className="text-indigo-700">secUid</code> diambil dari viewport
 					tab itu.
 				</p>
@@ -260,6 +278,24 @@ export function TikTokCookieForm({
 
 			<FieldGroup>
 				<div className="flex flex-wrap items-center gap-2 pb-1">
+					<a
+						href={tiktokUrl}
+						target="_blank"
+						rel="noreferrer"
+						className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white no-underline hover:bg-slate-800"
+					>
+						<ExternalLink className="h-4 w-4" />
+						{handle ? `Buka @${handle}` : "Buka TikTok"}
+					</a>
+					<Button
+						type="button"
+						variant="secondary"
+						onClick={onInstallExtension}
+						size="lg"
+					>
+						<Download className="h-4 w-4" />
+						Pasang Ekstensi
+					</Button>
 					<Button
 						type="button"
 						variant="outline"
@@ -389,7 +425,7 @@ export function TikTokCookieForm({
 	}
 
 	return (
-		<section className="mt-6 rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
+		<section className="mt-6 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm">
 			{body}
 		</section>
 	);

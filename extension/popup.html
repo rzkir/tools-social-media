@@ -5,69 +5,329 @@
     <style>
       :root {
         color-scheme: dark;
+        --bg: #0f1115;
+        --panel: #171a21;
+        --line: #2a303c;
+        --text: #eef1f6;
+        --muted: #9aa3b2;
+        --accent: #00f2ea;
+        --tiktok: #fe2c55;
+        --ig: #e1306c;
+        --ok: #4ade80;
+        --bad: #f87171;
+        --warn: #fbbf24;
+      }
+      * {
+        box-sizing: border-box;
       }
       body {
         margin: 0;
-        width: 280px;
+        width: 320px;
         font: 13px/1.45 system-ui, sans-serif;
-        background: #111;
-        color: #eee;
-        padding: 14px;
+        background: var(--bg);
+        color: var(--text);
+        padding: 12px;
+      }
+      .head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
       }
       h1 {
-        margin: 0 0 4px;
+        margin: 0;
         font-size: 14px;
-        color: #00f2ea;
+        color: var(--accent);
       }
-      p {
-        margin: 0 0 12px;
-        color: #aaa;
+      .sub {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .live {
+        flex-shrink: 0;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: #1a1a1a;
+        border: 1px solid var(--line);
+        color: var(--muted);
+      }
+      .live.ok {
+        color: var(--ok);
+        border-color: #245c3a;
+        background: #122018;
+      }
+      .live.bad {
+        color: var(--bad);
+        border-color: #5c2424;
+        background: #201212;
+      }
+      .tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-bottom: 10px;
+        padding: 4px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+      }
+      .tab {
+        border: 0;
+        border-radius: 8px;
+        padding: 8px 10px;
         font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        background: transparent;
+        color: var(--muted);
+      }
+      .tab.active[data-platform="tiktok"] {
+        background: rgba(254, 44, 85, 0.16);
+        color: #ff7a95;
+      }
+      .tab.active[data-platform="instagram"] {
+        background: rgba(225, 48, 108, 0.16);
+        color: #ff7aad;
+      }
+      .panel {
+        display: none;
+      }
+      .panel.active {
+        display: block;
+      }
+      .account {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        margin-bottom: 10px;
+      }
+      .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 999px;
+        object-fit: cover;
+        background: #222;
+        flex-shrink: 0;
+      }
+      .avatar.ph {
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .account strong {
+        display: block;
+        font-size: 13px;
+      }
+      .account span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .metric {
+        padding: 10px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+      }
+      .metric .label {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+      }
+      .metric .value {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .modes {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .mode {
+        text-align: center;
+        padding: 8px 6px;
+        border-radius: 10px;
+        background: #12151b;
+        border: 1px solid var(--line);
+      }
+      .mode .label {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+        margin-bottom: 2px;
+      }
+      .mode .value {
+        font-weight: 800;
+        font-size: 14px;
       }
       .status {
         padding: 8px 10px;
-        border-radius: 8px;
-        background: #1a1a1a;
-        border: 1px solid #2a2a2a;
-        margin-bottom: 12px;
+        border-radius: 10px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        margin-bottom: 10px;
         font-size: 12px;
+        color: var(--muted);
       }
-      .ok {
-        color: #4ade80;
+      .status .ok {
+        color: var(--ok);
       }
-      .bad {
-        color: #f87171;
+      .status .bad {
+        color: var(--bad);
       }
-      button {
+      .hint {
+        margin: 0 0 10px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: #1a1710;
+        border: 1px solid #3d3420;
+        color: var(--warn);
+        font-size: 11px;
+      }
+      .actions {
+        display: grid;
+        gap: 6px;
+      }
+      button.btn {
         width: 100%;
-        margin: 0 0 8px;
+        margin: 0;
         padding: 9px 10px;
         border: 0;
         border-radius: 8px;
         font-weight: 600;
         cursor: pointer;
-        background: #00f2ea;
+        background: var(--accent);
         color: #111;
       }
-      button.secondary {
-        background: #222;
-        color: #eee;
-        border: 1px solid #333;
+      button.btn.secondary {
+        background: #22262f;
+        color: var(--text);
+        border: 1px solid var(--line);
       }
-      code {
+      .foot {
+        margin-top: 10px;
         font-size: 10px;
+        color: #6b7280;
         word-break: break-all;
-        color: #888;
       }
     </style>
   </head>
   <body>
-    <h1>Remove TikTok</h1>
-    <p>Hapus repost / like dari dashboard. Ikon ini hanya helper.</p>
-    <div id="status" class="status">Mengecek…</div>
-    <button id="openDash" type="button">Buka Dashboard</button>
-    <button id="openTt" class="secondary" type="button">Buka TikTok</button>
-    <code id="extId"></code>
+    <div class="head">
+      <div>
+        <h1>Remove TikTok</h1>
+        <p class="sub">Metrics &amp; shortcut platform</p>
+      </div>
+      <div id="liveBadge" class="live">…</div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button
+        type="button"
+        class="tab active"
+        data-platform="tiktok"
+        role="tab"
+        aria-selected="true"
+      >
+        TikTok
+      </button>
+      <button
+        type="button"
+        class="tab"
+        data-platform="instagram"
+        role="tab"
+        aria-selected="false"
+      >
+        Instagram
+      </button>
+    </div>
+
+    <section id="panel-tiktok" class="panel active" role="tabpanel">
+      <div id="ttAccount" class="account"></div>
+      <div class="metrics">
+        <div class="metric">
+          <span class="label">Removed</span>
+          <span id="ttRemoved" class="value">0</span>
+        </div>
+        <div class="metric">
+          <span class="label">Failed</span>
+          <span id="ttFailed" class="value">0</span>
+        </div>
+        <div class="metric">
+          <span class="label">Jobs</span>
+          <span id="ttJobs" class="value">0</span>
+        </div>
+        <div class="metric">
+          <span class="label">Success</span>
+          <span id="ttSuccess" class="value">0%</span>
+        </div>
+      </div>
+      <div class="modes">
+        <div class="mode">
+          <span class="label">Repost</span>
+          <span id="ttRepost" class="value">0</span>
+        </div>
+        <div class="mode">
+          <span class="label">Like</span>
+          <span id="ttLike" class="value">0</span>
+        </div>
+        <div class="mode">
+          <span class="label">Favorite</span>
+          <span id="ttFavorite" class="value">0</span>
+        </div>
+      </div>
+      <div id="ttStatus" class="status">Mengecek…</div>
+      <div id="ttHint" class="hint" hidden></div>
+      <div class="actions">
+        <button id="openDashTt" class="btn" type="button">Buka Dashboard</button>
+        <button id="openTt" class="btn secondary" type="button">Buka TikTok</button>
+      </div>
+    </section>
+
+    <section id="panel-instagram" class="panel" role="tabpanel">
+      <div id="igAccount" class="account"></div>
+      <div class="metrics">
+        <div class="metric">
+          <span class="label">Connects</span>
+          <span id="igConnects" class="value">0</span>
+        </div>
+        <div class="metric">
+          <span class="label">Session</span>
+          <span id="igSession" class="value">—</span>
+        </div>
+      </div>
+      <p id="igHint" class="hint">
+        Tool hapus Instagram belum aktif. Metrics job masih fokus TikTok. Hubungkan
+        cookie IG dari dashboard Accounts.
+      </p>
+      <div class="actions">
+        <button id="openDashIg" class="btn" type="button">Buka Accounts</button>
+        <button id="openIg" class="btn secondary" type="button">Buka Instagram</button>
+      </div>
+    </section>
+
+    <div id="extId" class="foot"></div>
     <script src="config.js"></script>
     <script src="popup.js"></script>
   </body>

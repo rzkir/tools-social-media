@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Remove TikTok",
-  "version": "1.5.5",
+  "version": "1.5.7",
   "description": "Hapus repost / like / favorite TikTok dari dashboard — jalan di tab TikTok yang sudah login.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqdb94b1TjspXi+KRivlD8fPrIP8/FDJBGwWlSWZYewNcWunDCVNsc0gAq03OqFqy3YzuxGdwdgvNZKmYdJSn+u0niS9CM/hXWxVkdM5B9HWC4Klw+wdY+khe4MV/JrhhWbFDUC0KOJEb/q42yxb+Vixt0zL57fZcZEgHYMifx4MFodvilTTTBVhQmwyAZArmHx8J921f8MetZhmIAOazWP48DNKFESFvCWibqyzI6gmhEYCD63wHOmPWIpPrxXjWJHOpYObJnygm8Gioxu0gljzl1Ns51jIXQcusc7BB5n/1sleM+AfAiC1Z9dnEjNbBSxCSoWmnEIReTZVlqrlUgQIDAQAB",
   "permissions": [

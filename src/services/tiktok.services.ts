@@ -90,7 +90,7 @@ function emptyResponseHint(path: string): string {
 	return (
 		`TikTok mengembalikan respons kosong dari ${path}. ` +
 		"Request dari server sering ditolak anti-bot TikTok (bukan hanya msToken kedaluwarsa). " +
-		"Pakai tab Script Browser di halaman ini — jalankan di Console tiktok.com (lebih andal)."
+		"Perbarui cookie (sessionid + msToken) dari DevTools → Application → Cookies setelah login di tiktok.com, lalu verifikasi ulang."
 	);
 }
 
@@ -780,7 +780,7 @@ export async function listReposts(
 
 	if (!getCookieValue(cookieHeader, "msToken")) {
 		throw new TikTokServiceError(
-			"msToken wajib. Salin nilai terbaru dari DevTools → Application → Cookies → msToken, atau pakai Script Browser.",
+			"msToken wajib. Salin nilai terbaru dari DevTools → Application → Cookies → msToken setelah login di tiktok.com.",
 		);
 	}
 
