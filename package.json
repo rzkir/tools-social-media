@@ -6,11 +6,12 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "sync:extension": "node scripts/sync-extension-config.mjs",
+    "sync:extension": "node scripts/sync-extension-config.mjs --mode=development",
+    "sync:extension:prod": "node scripts/sync-extension-config.mjs --mode=production",
     "extension:install": "node scripts/install-extension.mjs",
-    "dev": "node scripts/sync-extension-config.mjs && vite dev --port 3000",
+    "dev": "node scripts/sync-extension-config.mjs --mode=development && vite dev --port 3000",
     "generate-routes": "tsr generate",
-    "build": "node scripts/sync-extension-config.mjs && vite build",
+    "build": "node scripts/sync-extension-config.mjs --mode=production && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "format": "biome format",

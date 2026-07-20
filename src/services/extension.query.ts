@@ -64,6 +64,7 @@ export async function startExtensionJobMutation(
 		secUid?: string;
 		delayMs: number;
 		mode?: "repost" | "like";
+		platform?: "tiktok" | "instagram";
 	},
 ) {
 	const result = await startExtensionJob(options);
@@ -83,7 +84,7 @@ export async function stopExtensionJobMutation(queryClient: QueryClient) {
 
 export async function confirmExtensionRemoveMutation(
 	queryClient: QueryClient,
-	options: { limit: number },
+	options: { limit: number; platform?: "tiktok" | "instagram" },
 ) {
 	const result = await confirmExtensionRemove(options);
 	const state = getLastExtensionState();

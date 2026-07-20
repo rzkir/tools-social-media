@@ -61,14 +61,22 @@ export function buildInstagramCookieHeader(
 		.map(([key, raw]) => {
 			const value = raw.trim();
 			if (!value) return null;
+			let normalized = value;
 			if (
 				value.includes("=") &&
 				value.toLowerCase().startsWith(key.toLowerCase())
 			) {
 				const eq = value.indexOf("=");
-				return `${key}=${value.slice(eq + 1).trim()}`;
+				normalized = value.slice(eq + 1).trim();
 			}
-			return `${key}=${value}`;
+			try {
+				if (/%[0-9A-Fa-f]{2}/.test(normalized)) {
+					normalized = decodeURIComponent(normalized);
+				}
+			} catch {
+				// keep original
+			}
+			return `${key}=${normalized}`;
 		})
 		.filter(Boolean)
 		.join("; ");

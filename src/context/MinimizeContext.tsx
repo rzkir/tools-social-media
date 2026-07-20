@@ -24,6 +24,7 @@ export type ProgressJobMode = "repost" | "like";
 
 export type ProgressJob = {
 	mode: ProgressJobMode;
+	platform?: "tiktok" | "instagram";
 	modeLabel: string;
 	listingWord: string;
 };
@@ -54,7 +55,11 @@ const MinimizeContext = createContext<MinimizeContextValue | null>(null);
 
 function matchesJob(state: ExtensionState | null, job: ProgressJob | null) {
 	if (!state || !job) return false;
-	return !state.mode || state.mode === job.mode;
+	const modeOk = !state.mode || state.mode === job.mode;
+	const jobPlatform = job.platform || "tiktok";
+	const statePlatform = state.platform || "tiktok";
+	const platformOk = statePlatform === jobPlatform;
+	return modeOk && platformOk;
 }
 
 function isActiveStatus(status: string | undefined) {
@@ -123,6 +128,7 @@ export function MinimizeProvider({ children }: { children: ReactNode }) {
 				running: true,
 				status: "starting",
 				mode: next.mode,
+				platform: next.platform || "tiktok",
 				progress: { done: 0, failed: 0, total: 0, listed: 0, page: 0 },
 				lastError: null,
 				startedAt: null,
@@ -168,9 +174,12 @@ export function MinimizeProvider({ children }: { children: ReactNode }) {
 			setClientStartedAt(Date.now());
 			setMinimized(false);
 			setDialogOpen(true);
-			return confirmMutation.mutateAsync({ limit });
+			return confirmMutation.mutateAsync({
+				limit,
+				platform: job?.platform || "tiktok",
+			});
 		},
-		[confirmMutation],
+		[confirmMutation, job?.platform],
 	);
 
 	// When listing finishes, open dialog so user can set delete limit

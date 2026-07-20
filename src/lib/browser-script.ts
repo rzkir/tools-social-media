@@ -209,3 +209,275 @@ export function buildTikTokBrowserScript(options: {
   run().catch((e) => alert(String(e && e.message ? e.message : e)));
 })();`;
 }
+
+/** Build a console script for removing Instagram reposts on instagram.com. */
+export function buildInstagramRepostScript(options: {
+	username?: string;
+	userId?: string;
+	delayMs: number;
+}): string {
+	const username = JSON.stringify(
+		options.username?.trim().replace(/^@/, "") || "",
+	);
+	const userId = JSON.stringify(options.userId?.trim() || "");
+	const delayMs = Math.max(500, Math.floor(options.delayMs));
+
+	return `(() => {
+  const CONFIG = {
+    username: ${username},
+    userId: ${userId},
+    delayMs: ${delayMs},
+    maxPages: 50,
+    igAppId: "936619673304451",
+  };
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function getCookie(name) {
+    const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+
+  function igHeaders() {
+    const csrftoken = getCookie("csrftoken");
+    if (!csrftoken) throw new Error("csrftoken tidak ditemukan. Login dulu di instagram.com.");
+    return {
+      accept: "*/*",
+      "x-csrftoken": csrftoken,
+      "x-ig-app-id": CONFIG.igAppId,
+      "x-requested-with": "XMLHttpRequest",
+      "content-type": "application/x-www-form-urlencoded",
+    };
+  }
+
+  async function readJson(res, label) {
+    const text = await res.text();
+    if (!text.trim()) throw new Error("Respons kosong dari " + label);
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(label + " bukan JSON (HTTP " + res.status + "): " + text.slice(0, 120));
+    }
+  }
+
+  async function getCurrentUser() {
+    const res = await fetch("/api/v1/accounts/current_user/?edit=true", {
+      headers: igHeaders(),
+      credentials: "include",
+    });
+    const json = await readJson(res, "current_user");
+    const user = json.user;
+    if (!user) throw new Error("Session tidak valid. Login ulang di instagram.com.");
+    return user;
+  }
+
+  async function listRepostsPage(userPk, maxId) {
+    const params = new URLSearchParams();
+    if (maxId) params.set("max_id", String(maxId));
+    const paths = [
+      "/api/v1/users/" + userPk + "/reposts/?" + params.toString(),
+      "/api/v1/clips/user/reposts/?target_user_id=" + userPk + (maxId ? "&max_id=" + encodeURIComponent(maxId) : ""),
+    ];
+    let lastErr = null;
+    for (const path of paths) {
+      try {
+        const res = await fetch(path, {
+          headers: igHeaders(),
+          credentials: "include",
+        });
+        const json = await readJson(res, path);
+        const items =
+          json.items ||
+          json.medias ||
+          json.data?.items ||
+          json.data?.medias ||
+          [];
+        const next =
+          json.next_max_id ||
+          json.paging_info?.max_id ||
+          json.more_available && json.next_max_id
+            ? json.next_max_id
+            : null;
+        if (Array.isArray(items)) {
+          return { items, nextMaxId: next || null };
+        }
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("Tidak bisa memuat daftar repost.");
+  }
+
+  function mediaPk(item) {
+    return String(
+      item.pk ||
+        item.id ||
+        item.media?.pk ||
+        item.media?.id ||
+        item.media_id ||
+        "",
+    ).trim();
+  }
+
+  async function unrepostOne(mediaPkValue) {
+    const pk = String(mediaPkValue || "").trim();
+    if (!pk) throw new Error("media pk kosong");
+    const attempts = [
+      {
+        url: "/api/v1/media/" + pk + "/delete_repost/",
+        method: "POST",
+        body: "",
+      },
+      {
+        url: "/api/v1/media/" + pk + "/unrepost/",
+        method: "POST",
+        body: "",
+      },
+      {
+        url: "/api/v1/media/" + pk + "/repost/",
+        method: "DELETE",
+        body: null,
+      },
+    ];
+    let lastErr = null;
+    for (const attempt of attempts) {
+      try {
+        const res = await fetch(attempt.url, {
+          method: attempt.method,
+          headers: igHeaders(),
+          credentials: "include",
+          body: attempt.body,
+        });
+        const json = await readJson(res, attempt.url);
+        if (json.status === "ok" || res.ok) return true;
+        lastErr = new Error(json.message || "gagal unrepost " + pk);
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("gagal unrepost " + pk);
+  }
+
+  function ensurePanel() {
+    let panel = document.getElementById("rr-ig-panel");
+    if (panel) return panel;
+    panel = document.createElement("div");
+    panel.id = "rr-ig-panel";
+    panel.innerHTML =
+      '<div style="font:600 13px system-ui;color:#f472b6;margin-bottom:8px">Remove IG Repost</div>' +
+      '<div id="rr-ig-status" style="font:12px/1.4 system-ui;color:#eee;min-height:48px">Menyiapkan…</div>' +
+      '<div style="display:flex;gap:8px;margin-top:10px">' +
+      '<button id="rr-ig-stop" style="flex:1;padding:8px;border:0;border-radius:8px;background:#db2777;color:#fff;font-weight:600;cursor:pointer">Stop</button>' +
+      '<button id="rr-ig-close" style="padding:8px 10px;border:1px solid #333;border-radius:8px;background:#111;color:#aaa;cursor:pointer">✕</button>' +
+      "</div>";
+    Object.assign(panel.style, {
+      position: "fixed",
+      top: "16px",
+      right: "16px",
+      width: "320px",
+      zIndex: "2147483647",
+      background: "#0d0d0d",
+      border: "1px solid #2a2a2a",
+      borderLeft: "3px solid #f472b6",
+      borderRadius: "12px",
+      padding: "12px 14px",
+      boxShadow: "0 12px 40px rgba(0,0,0,.5)",
+    });
+    document.documentElement.appendChild(panel);
+    return panel;
+  }
+
+  async function run() {
+    if (!location.hostname.includes("instagram.com")) {
+      alert("Buka tab https://www.instagram.com dulu (harus login), baru paste script di Console.");
+      return;
+    }
+
+    if (CONFIG.username) {
+      const path = "/" + CONFIG.username + "/";
+      if (!location.pathname.toLowerCase().includes("/" + CONFIG.username.toLowerCase())) {
+        alert(
+          "Kamu belum di halaman profil @" + CONFIG.username + ".\\n\\n" +
+          "1) Buka https://www.instagram.com/" + CONFIG.username + "/\\n" +
+          "2) Pastikan login\\n" +
+          "3) Paste script lagi di Console"
+        );
+        return;
+      }
+    }
+
+    const panel = ensurePanel();
+    const set = (t) => {
+      const el = panel.querySelector("#rr-ig-status");
+      if (el) el.textContent = t;
+    };
+    let stopped = false;
+    panel.querySelector("#rr-ig-stop").onclick = () => { stopped = true; set("Dihentikan."); };
+    panel.querySelector("#rr-ig-close").onclick = () => panel.remove();
+
+    set("Memverifikasi session…");
+    const me = await getCurrentUser();
+    const userPk = String(CONFIG.userId || me.pk || me.id || "").trim();
+    const handle = String(me.username || CONFIG.username || "").trim();
+    if (CONFIG.username && handle && handle.toLowerCase() !== CONFIG.username.toLowerCase()) {
+      throw new Error("Login sebagai @" + handle + ", bukan @" + CONFIG.username + ".");
+    }
+    if (!userPk) throw new Error("User ID tidak ditemukan dari session.");
+
+    const all = [];
+    let maxId = null;
+    for (let page = 1; page <= CONFIG.maxPages; page++) {
+      if (stopped) return;
+      set("Memuat repost halaman " + page + "…");
+      const pageData = await listRepostsPage(userPk, maxId);
+      const batch = (pageData.items || []).map((item) => ({
+        pk: mediaPk(item),
+        code: item.code || item.media?.code || "",
+      })).filter((item) => item.pk);
+      all.push(...batch);
+      set("Memuat " + page + " · total " + all.length + " repost");
+      if (!pageData.nextMaxId || !batch.length) break;
+      maxId = pageData.nextMaxId;
+      await sleep(Math.min(CONFIG.delayMs, 1200));
+    }
+
+    const unique = [];
+    const seen = new Set();
+    for (const item of all) {
+      if (!item.pk || seen.has(item.pk)) continue;
+      seen.add(item.pk);
+      unique.push(item);
+    }
+
+    if (!unique.length) {
+      set("Tidak ada repost ditemukan. Buka tab Repost di profil Instagram lalu coba lagi.");
+      return;
+    }
+
+    set("Siap hapus " + unique.length + " repost. Mulai…");
+    await sleep(800);
+
+    let ok = 0;
+    let fail = 0;
+    for (let i = 0; i < unique.length; i++) {
+      if (stopped) {
+        set("Stop. OK " + ok + " · gagal " + fail + " · sisa " + (unique.length - i));
+        return;
+      }
+      const item = unique[i];
+      try {
+        await unrepostOne(item.pk);
+        ok++;
+        set("Hapus " + (i + 1) + "/" + unique.length + " · " + (item.code || item.pk) + " · OK " + ok);
+      } catch (e) {
+        fail++;
+        set("Gagal " + (i + 1) + "/" + unique.length + ": " + (e && e.message ? e.message : e));
+      }
+      await sleep(CONFIG.delayMs);
+    }
+    set("Selesai. Berhasil " + ok + ", gagal " + fail + ".");
+  }
+
+  run().catch((e) => alert(String(e && e.message ? e.message : e)));
+})();`;
+}

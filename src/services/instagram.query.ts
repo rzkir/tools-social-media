@@ -1,5 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { InstagramCookieValues } from "#/components/InstagramCookieForm";
+import {
+	hasExtensionMarker,
+	verifyInstagramSessionViaExtension,
+} from "#/lib/extension-bridge";
 import { verifyInstagramSessionFn } from "#/server/instagram.functions";
 import { recordConnectResultMutation } from "#/services/metrics.query";
 import { saveCookieSessionMutation } from "#/services/session.query";
@@ -24,13 +28,31 @@ export async function verifyInstagramSessionMutation(
 	queryClient: QueryClient,
 	input: VerifyInstagramSessionInput,
 ): Promise<VerifyInstagramSessionSuccess> {
-	const result = await verifyInstagramSessionFn({
-		data: {
-			cookies: input.cookies,
-			username: input.username || input.cookieValues.username,
-			avatarHint: input.cookieValues.avatarUrl,
-		},
-	});
+	const verifyInput = {
+		cookies: input.cookies,
+		username: input.username || input.cookieValues.username,
+		avatarHint: input.cookieValues.avatarUrl,
+	};
+
+	let result: Awaited<ReturnType<typeof verifyInstagramSessionFn>>;
+
+	if (hasExtensionMarker()) {
+		const extResult = await verifyInstagramSessionViaExtension(verifyInput);
+		if (extResult.ok) {
+			result = { ok: true as const, user: extResult.user };
+		} else {
+			// Extension verify failed — retry server only if extension unreachable
+			const unreachable =
+				/timeout|tidak merespons|terputus|unavailable/i.test(
+					extResult.error || "",
+				);
+			result = unreachable
+				? await verifyInstagramSessionFn({ data: verifyInput })
+				: { ok: false as const, error: extResult.error };
+		}
+	} else {
+		result = await verifyInstagramSessionFn({ data: verifyInput });
+	}
 
 	if (!result?.ok) {
 		const message =

@@ -45,6 +45,7 @@ export function useStartExtensionJob() {
 			secUid?: string;
 			delayMs: number;
 			mode?: "repost" | "like";
+			platform?: "tiktok" | "instagram";
 		}) => startExtensionJobMutation(queryClient, options),
 	});
 }
@@ -59,8 +60,10 @@ export function useStopExtensionJob() {
 export function useConfirmExtensionRemove() {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (options: { limit: number }) =>
-			confirmExtensionRemoveMutation(queryClient, options),
+		mutationFn: (options: {
+			limit: number;
+			platform?: "tiktok" | "instagram";
+		}) => confirmExtensionRemoveMutation(queryClient, options),
 	});
 }
 

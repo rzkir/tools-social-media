@@ -1,12 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
-import { BrowserScriptPanel } from "#/components/BrowserScriptPanel";
+import { InstagramBrowserScriptPanel } from "#/components/InstagramBrowserScriptPanel";
 import { useAlertStatus } from "#/components/dialog/alert-status.dialog";
 import {
-	EMPTY_COOKIE_VALUES,
-	type TikTokCookieValues,
-} from "#/components/TikTokCookieForm";
+	EMPTY_INSTAGRAM_COOKIE_VALUES,
+	type InstagramCookieValues,
+} from "#/components/InstagramCookieForm";
 import { Button } from "#/components/ui/button";
 import { Field, FieldLabel } from "#/components/ui/field";
 import { useMinimizeOptional } from "#/context/MinimizeContext";
@@ -20,10 +20,8 @@ import {
 	downloadExtensionZip,
 	EXTENSION_INSTALL_HINT,
 } from "#/lib/extension-install";
-import { hasSavedAccount, isTikTokAccount } from "#/lib/session-store";
+import { hasSavedAccount, isInstagramAccount } from "#/lib/session-store";
 import type { TikTokUser } from "#/types/tiktok";
-
-export type RemoveToolMode = "repost" | "like";
 
 type SpeedMode = "fast" | "normal" | "safe";
 
@@ -33,50 +31,25 @@ const SPEED_DELAY_MS: Record<SpeedMode, number> = {
 	safe: 3000,
 };
 
-const COPY: Record<
-	RemoveToolMode,
-	{
-		eyebrow: string;
-		title: string;
-		readyHint: string;
-		setupHint: string;
-		startLabel: string;
-		idleHint: string;
-		listingWord: string;
-	}
-> = {
-	repost: {
-		eyebrow: "Remove repost",
-		title: "Hapus Repost",
-		readyHint:
-			"Akun tersimpan — tinggal Start. Hapus jalan di tab TikTok yang sudah login.",
-		setupHint:
-			"Hubungkan akun sekali, lalu Start dari sini lewat ekstensi Chrome.",
-		startLabel: "Start Hapus Repost",
-		idleHint:
-			"Siap. Klik Start untuk memuat daftar, lalu atur jumlah yang dihapus.",
-		listingWord: "repost",
-	},
-	like: {
-		eyebrow: "Remove likes",
-		title: "Hapus Disukai",
-		readyHint:
-			"Akun tersimpan — tinggal Start. Hapus like (Disukai) di tab TikTok yang sudah login.",
-		setupHint:
-			"Hubungkan akun sekali, lalu Start dari sini lewat ekstensi Chrome.",
-		startLabel: "Start Hapus Disukai",
-		idleHint:
-			"Siap. Klik Start untuk memuat daftar, lalu atur jumlah yang dihapus.",
-		listingWord: "like",
-	},
-};
+const COPY = {
+	eyebrow: "Remove repost",
+	title: "Hapus Repost Instagram",
+	readyHint:
+		"Akun tersimpan — tinggal Start. Hapus jalan di tab Instagram yang sudah login.",
+	setupHint:
+		"Hubungkan akun sekali, lalu Start dari sini lewat ekstensi Chrome.",
+	startLabel: "Start Hapus Repost",
+	idleHint:
+		"Siap. Klik Start untuk memuat daftar, lalu atur jumlah yang dihapus.",
+	listingWord: "repost",
+} as const;
 
-export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
-	const copy = COPY[mode];
+export function InstagramRemoveTool() {
 	const minimizeCtx = useMinimizeOptional();
 	const notify = useNotificationOptional();
 	const statusAlert = useAlertStatus();
-	const { data: session, isLoading: sessionLoading } = useCookieSession("tiktok");
+	const { data: session, isLoading: sessionLoading } =
+		useCookieSession("instagram");
 	const {
 		data: queryExtOk = false,
 		isFetching: extFetching,
@@ -92,8 +65,10 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	const openProgress = minimizeCtx?.openProgress;
 	const expand = minimizeCtx?.expand;
 	const stopJob = minimizeCtx?.stopJob;
-	const [cookieValues, setCookieValues] =
-		useState<TikTokCookieValues>(EMPTY_COOKIE_VALUES);
+
+	const [cookieValues, setCookieValues] = useState<InstagramCookieValues>(
+		EMPTY_INSTAGRAM_COOKIE_VALUES,
+	);
 	const [user, setUser] = useState<TikTokUser | null>(null);
 	const [speed, setSpeed] = useState<SpeedMode>("normal");
 	const [error, setError] = useState<string | null>(null);
@@ -103,7 +78,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 
 	useEffect(() => {
 		if (sessionLoading) return;
-		if (session && isTikTokAccount(session)) {
+		if (session && isInstagramAccount(session)) {
 			setCookieValues(session.cookies);
 			setUser(session.user);
 			setEditAccount(!hasSavedAccount(session));
@@ -114,7 +89,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	}, [session, sessionLoading]);
 
 	const persist = (
-		nextCookies: TikTokCookieValues,
+		nextCookies: InstagramCookieValues,
 		nextUser: TikTokUser | null = user,
 	) => {
 		setCookieValues(nextCookies);
@@ -123,22 +98,22 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 			cookies: nextCookies,
 			user: nextUser,
 			meta: {
-				platform: "tiktok",
+				platform: "instagram",
 				bridge: "cookie",
-				id: session && isTikTokAccount(session) ? session.id : undefined,
+				id: session && isInstagramAccount(session) ? session.id : undefined,
 				setActive: true,
 			},
 		});
 	};
 
 	const username = cookieValues.username || user?.uniqueId || "";
-	const secUid = cookieValues.secUid || user?.secUid || "";
+	const userId = cookieValues.ds_user_id || user?.secUid || "";
 	const displayName = user?.nickname || username;
 	const hasAccount = Boolean(username.trim());
 	const extensionOk = queryExtOk || extInstalled;
 	const extChecking = !hydrated || (extFetching && !extensionOk);
 	const thisJobRunning =
-		running && job?.mode === mode && (job?.platform || "tiktok") === "tiktok";
+		running && job?.mode === "repost" && job?.platform === "instagram";
 	const showProgressActions = Boolean(job) || hasProgress;
 
 	const onStart = async () => {
@@ -168,17 +143,17 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 		persist({ ...cookieValues, username: handle });
 		setEditAccount(false);
 		openProgress?.({
-			mode,
-			platform: "tiktok",
-			modeLabel: copy.title,
-			listingWord: copy.listingWord,
+			mode: "repost",
+			platform: "instagram",
+			modeLabel: COPY.title,
+			listingWord: COPY.listingWord,
 		});
-        const result = await startJob.mutateAsync({
+		const result = await startJob.mutateAsync({
 			uniqueId: handle,
-			secUid: secUid.trim() || undefined,
+			secUid: userId.trim() || undefined,
 			delayMs: SPEED_DELAY_MS[speed],
-			mode,
-			platform: "tiktok",
+			mode: "repost",
+			platform: "instagram",
 		});
 		if (!result.ok) {
 			const msg = result.error || "Gagal memulai.";
@@ -186,12 +161,12 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 			notify?.error(msg, { title: "Gagal Start" });
 			statusAlert.error("Gagal Start", msg);
 		} else {
-			notify?.info(`Memuat daftar ${copy.listingWord}…`, {
-				title: copy.title,
+			notify?.info(`Memuat daftar ${COPY.listingWord}…`, {
+				title: COPY.title,
 			});
 			statusAlert.info(
-				copy.title,
-				`Memuat daftar ${copy.listingWord}… Progress muncul di dialog. Atur jumlah lalu Hapus.`,
+				COPY.title,
+				`Memuat daftar ${COPY.listingWord}… Progress muncul di dialog. Atur jumlah lalu Hapus.`,
 			);
 		}
 	};
@@ -211,7 +186,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 			notify?.success("Ekstensi terhubung.", { title: "Ekstensi" });
 			statusAlert.success(
 				"Ekstensi terhubung",
-				"Siap Start dari dashboard. Pastikan tab TikTok sudah login.",
+				"Siap Start dari dashboard. Pastikan tab Instagram sudah login.",
 			);
 		}
 	};
@@ -227,22 +202,22 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	return (
 		<div className="pb-4">
 			<section className="rise-in relative overflow-hidden rounded-4xl border border-slate-100 bg-white px-6 py-9 shadow-sm sm:px-10">
-				<div className="pointer-events-none absolute -top-24 -left-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(99,102,241,0.18),transparent_66%)]" />
-				<p className="mb-3 text-xs font-bold tracking-widest text-indigo-600 uppercase">
-					{copy.eyebrow}
+				<div className="pointer-events-none absolute -top-24 -right-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(225,48,108,0.16),transparent_66%)]" />
+				<p className="mb-3 text-xs font-bold tracking-widest text-pink-600 uppercase">
+					{COPY.eyebrow}
 				</p>
 				<h1 className="mb-2 max-w-3xl text-4xl leading-[1.05] font-extrabold tracking-tight text-slate-900 sm:text-5xl">
-					{copy.title}
+					{COPY.title}
 				</h1>
 				<p className="m-0 max-w-2xl text-base text-slate-400">
-					{hasAccount ? copy.readyHint : copy.setupHint}
+					{hasAccount ? COPY.readyHint : COPY.setupHint}
 				</p>
 			</section>
 
 			<section className="mt-6 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm">
 				<div className="mb-5 flex flex-wrap items-center justify-between gap-3">
 					<div>
-						<p className="mb-1 text-xs font-bold tracking-widest text-indigo-600 uppercase">
+						<p className="mb-1 text-xs font-bold tracking-widest text-pink-600 uppercase">
 							Ekstensi
 						</p>
 						<p className="m-0 text-sm text-slate-600">
@@ -288,14 +263,12 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 							<Button variant="secondary" onClick={() => void onRecheck()}>
 								Cek Ulang
 							</Button>
-							{mode === "repost" ? (
-								<Button
-									variant="ghost"
-									onClick={() => setShowFallback((v) => !v)}
-								>
-									{showFallback ? "Sembunyikan" : "Pakai Console (fallback)"}
-								</Button>
-							) : null}
+							<Button
+								variant="ghost"
+								onClick={() => setShowFallback((v) => !v)}
+							>
+								{showFallback ? "Sembunyikan" : "Pakai Console (fallback)"}
+							</Button>
 						</div>
 					</div>
 				) : (
@@ -322,7 +295,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 									</Button>
 									<Link
 										to="/dashboard/accounts"
-										className="inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-semibold text-indigo-600 no-underline hover:bg-indigo-50"
+										className="inline-flex items-center rounded-xl px-3 py-1.5 text-xs font-semibold text-pink-600 no-underline hover:bg-pink-50"
 									>
 										Accounts
 									</Link>
@@ -335,7 +308,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 										Belum ada akun. Isi username di bawah, atau{" "}
 										<Link
 											to="/dashboard/accounts"
-											className="font-semibold text-indigo-600"
+											className="font-semibold text-pink-600"
 										>
 											hubungkan di Accounts
 										</Link>
@@ -358,27 +331,27 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 														: cleaned
 															? {
 																	uniqueId: cleaned,
-																	secUid,
+																	secUid: userId,
 																	nickname: cleaned,
 																}
 															: null,
 												);
 											}}
-											placeholder="rzkir.20"
+											placeholder="rizverse2025"
 											disabled={thisJobRunning}
 											className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 ring-1 ring-slate-200 outline-none"
 										/>
 									</label>
 									<label className="block">
 										<span className="mb-1 block text-xs font-semibold text-slate-500">
-											secUid (opsional)
+											ds_user_id (opsional)
 										</span>
 										<input
-											value={secUid}
+											value={userId}
 											onChange={(e) => {
 												const next = e.target.value;
 												persist(
-													{ ...cookieValues, secUid: next },
+													{ ...cookieValues, ds_user_id: next },
 													user
 														? { ...user, secUid: next }
 														: username
@@ -390,7 +363,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 															: null,
 												);
 											}}
-											placeholder="MS4wLjABAAAA…"
+											placeholder="76633366542"
 											disabled={thisJobRunning}
 											className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 font-mono text-xs text-slate-900 ring-1 ring-slate-200 outline-none"
 										/>
@@ -413,11 +386,11 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 							className="flex-wrap items-end gap-2"
 						>
 							<div>
-								<FieldLabel htmlFor={`ext-speed-${mode}`} className="text-xs">
+								<FieldLabel htmlFor="ig-ext-speed" className="text-xs">
 									Kecepatan
 								</FieldLabel>
 								<select
-									id={`ext-speed-${mode}`}
+									id="ig-ext-speed"
 									value={speed}
 									onChange={(e) => setSpeed(e.target.value as SpeedMode)}
 									disabled={thisJobRunning}
@@ -447,7 +420,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 										size="lg"
 										disabled={!hasAccount}
 									>
-										{copy.startLabel}
+										{COPY.startLabel}
 									</Button>
 									{showProgressActions && expand ? (
 										<Button variant="secondary" onClick={expand}>
@@ -465,30 +438,28 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 						) : null}
 
 						{hasAccount && !thisJobRunning ? (
-							<p className="m-0 text-sm text-slate-400">{copy.idleHint}</p>
+							<p className="m-0 text-sm text-slate-400">{COPY.idleHint}</p>
 						) : null}
 
-						{mode === "repost" ? (
-							<button
-								type="button"
-								className="text-xs font-semibold text-slate-400 underline"
-								onClick={() => setShowFallback((v) => !v)}
-							>
-								{showFallback
-									? "Sembunyikan fallback Console"
-									: "Fallback: Script Console"}
-							</button>
-						) : null}
+						<button
+							type="button"
+							className="text-xs font-semibold text-slate-400 underline"
+							onClick={() => setShowFallback((v) => !v)}
+						>
+							{showFallback
+								? "Sembunyikan fallback Console"
+								: "Fallback: Script Console"}
+						</button>
 					</div>
 				)}
 			</section>
 
-			{mode === "repost" && showFallback ? (
+			{showFallback ? (
 				<section className="mt-6 rounded-4xl border border-slate-100 bg-white p-6 shadow-sm">
-					<BrowserScriptPanel
+					<InstagramBrowserScriptPanel
 						variant="plain"
 						username={username}
-						secUid={secUid}
+						userId={userId}
 						onUsernameChange={(nextUsername) => {
 							const cleaned = nextUsername.replace(/^@/, "");
 							persist(
@@ -498,22 +469,8 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 									: cleaned
 										? {
 												uniqueId: cleaned,
-												secUid: cookieValues.secUid,
+												secUid: userId,
 												nickname: cleaned,
-											}
-										: null,
-							);
-						}}
-						onSecUidChange={(nextSecUid) => {
-							persist(
-								{ ...cookieValues, secUid: nextSecUid },
-								user
-									? { ...user, secUid: nextSecUid }
-									: username
-										? {
-												uniqueId: username,
-												secUid: nextSecUid,
-												nickname: username,
 											}
 										: null,
 							);

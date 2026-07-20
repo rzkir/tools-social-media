@@ -3,6 +3,8 @@
  * Uses content-script postMessage first; chrome.runtime only with discovered ID.
  */
 
+import type { TikTokUser } from "#/types/tiktok";
+
 export type ExtensionProgressItem = {
 	id: string;
 	author: string;
@@ -26,6 +28,7 @@ export type ExtensionState = {
 	running: boolean;
 	status: string;
 	mode?: string | null;
+	platform?: "tiktok" | "instagram" | null;
 	progress: ExtensionProgress;
 	lastError: string | null;
 	/** Unix ms when job started */
@@ -245,12 +248,15 @@ export async function startExtensionJob(options: {
 	secUid?: string;
 	delayMs: number;
 	mode?: "repost" | "like";
+	platform?: "tiktok" | "instagram";
 }): Promise<{ ok: boolean; error?: string }> {
+	const platform = options.platform === "instagram" ? "instagram" : "tiktok";
 	// Clear stale progress so UI never flashes a previous run
 	lastState = {
 		running: true,
 		status: "starting",
 		mode: options.mode || "repost",
+		platform,
 		progress: { done: 0, failed: 0, total: 0, listed: 0, page: 0 },
 		lastError: null,
 		startedAt: null,
@@ -264,6 +270,7 @@ export async function startExtensionJob(options: {
 		secUid: options.secUid || "",
 		delayMs: options.delayMs,
 		mode: options.mode || "repost",
+		platform,
 	})) as { ok?: boolean; error?: string };
 	return { ok: Boolean(res?.ok), error: res?.error };
 }
@@ -274,11 +281,13 @@ export async function stopExtensionJob(): Promise<void> {
 
 export async function confirmExtensionRemove(options: {
 	limit: number;
+	platform?: "tiktok" | "instagram";
 }): Promise<{ ok: boolean; error?: string }> {
 	const limit = Math.max(1, Math.floor(Number(options.limit) || 1));
 	const res = (await sendToExtension({
 		type: "CONFIRM_REMOVE",
 		limit,
+		platform: options.platform,
 	})) as { ok?: boolean; error?: string };
 	return { ok: Boolean(res?.ok), error: res?.error };
 }
@@ -393,4 +402,39 @@ export async function fetchInstagramCookies(options?: {
 	}
 
 	return { ok: true, values: res.values, warning: res.warning };
+}
+
+/** Verify Instagram session cookies via the browser extension (residential IP). */
+export async function verifyInstagramSessionViaExtension(options: {
+	cookies: string;
+	username?: string;
+	avatarHint?: string;
+}): Promise<
+	| { ok: true; user: TikTokUser }
+	| { ok: false; error: string }
+> {
+	const res = (await sendToExtension(
+		{
+			type: "VERIFY_INSTAGRAM_SESSION",
+			cookies: options.cookies,
+			username: options.username,
+			avatarHint: options.avatarHint,
+		},
+		25000,
+	)) as {
+		ok?: boolean;
+		user?: TikTokUser;
+		error?: string;
+	};
+
+	if (res?.ok && res.user?.uniqueId) {
+		return { ok: true, user: res.user };
+	}
+
+	return {
+		ok: false,
+		error:
+			res?.error ||
+			"Gagal verifikasi cookie Instagram via ekstensi. Reload ekstensi lalu coba lagi.",
+	};
 }

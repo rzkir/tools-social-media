@@ -14,8 +14,10 @@ import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as DashboardAccountsRouteImport } from './routes/dashboard/accounts'
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
+import { Route as DashboardInstagramRouteImport } from './routes/dashboard/instagram'
 import { Route as DashboardTiktokRouteImport } from './routes/dashboard/tiktok'
 import { Route as DashboardInstagramIndexRouteImport } from './routes/dashboard/instagram/index'
+import { Route as DashboardInstagramRepostRouteImport } from './routes/dashboard/instagram/repost'
 import { Route as DashboardTiktokIndexRouteImport } from './routes/dashboard/tiktok/index'
 import { Route as DashboardTiktokLikeRouteImport } from './routes/dashboard/tiktok/like'
 import { Route as DashboardTiktokRepostRouteImport } from './routes/dashboard/tiktok/repost'
@@ -45,16 +47,27 @@ const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
+const DashboardInstagramRoute = DashboardInstagramRouteImport.update({
+  id: '/instagram',
+  path: '/instagram',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
 const DashboardTiktokRoute = DashboardTiktokRouteImport.update({
   id: '/tiktok',
   path: '/tiktok',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
 const DashboardInstagramIndexRoute = DashboardInstagramIndexRouteImport.update({
-  id: '/instagram/',
-  path: '/instagram/',
-  getParentRoute: () => DashboardRouteRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardInstagramRoute,
 } as any)
+const DashboardInstagramRepostRoute =
+  DashboardInstagramRepostRouteImport.update({
+    id: '/repost',
+    path: '/repost',
+    getParentRoute: () => DashboardInstagramRoute,
+  } as any)
 const DashboardTiktokIndexRoute = DashboardTiktokIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -76,8 +89,10 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteRouteWithChildren
   '/dashboard/accounts': typeof DashboardAccountsRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/instagram': typeof DashboardInstagramRouteWithChildren
   '/dashboard/tiktok': typeof DashboardTiktokRouteWithChildren
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/instagram/repost': typeof DashboardInstagramRepostRoute
   '/dashboard/tiktok/like': typeof DashboardTiktokLikeRoute
   '/dashboard/tiktok/repost': typeof DashboardTiktokRepostRoute
   '/dashboard/instagram/': typeof DashboardInstagramIndexRoute
@@ -88,6 +103,7 @@ export interface FileRoutesByTo {
   '/dashboard/accounts': typeof DashboardAccountsRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/dashboard/instagram/repost': typeof DashboardInstagramRepostRoute
   '/dashboard/tiktok/like': typeof DashboardTiktokLikeRoute
   '/dashboard/tiktok/repost': typeof DashboardTiktokRepostRoute
   '/dashboard/instagram': typeof DashboardInstagramIndexRoute
@@ -99,8 +115,10 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteRouteWithChildren
   '/dashboard/accounts': typeof DashboardAccountsRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
+  '/dashboard/instagram': typeof DashboardInstagramRouteWithChildren
   '/dashboard/tiktok': typeof DashboardTiktokRouteWithChildren
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/instagram/repost': typeof DashboardInstagramRepostRoute
   '/dashboard/tiktok/like': typeof DashboardTiktokLikeRoute
   '/dashboard/tiktok/repost': typeof DashboardTiktokRepostRoute
   '/dashboard/instagram/': typeof DashboardInstagramIndexRoute
@@ -113,8 +131,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/dashboard/accounts'
     | '/dashboard/analytics'
+    | '/dashboard/instagram'
     | '/dashboard/tiktok'
     | '/dashboard/'
+    | '/dashboard/instagram/repost'
     | '/dashboard/tiktok/like'
     | '/dashboard/tiktok/repost'
     | '/dashboard/instagram/'
@@ -125,6 +145,7 @@ export interface FileRouteTypes {
     | '/dashboard/accounts'
     | '/dashboard/analytics'
     | '/dashboard'
+    | '/dashboard/instagram/repost'
     | '/dashboard/tiktok/like'
     | '/dashboard/tiktok/repost'
     | '/dashboard/instagram'
@@ -135,8 +156,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/dashboard/accounts'
     | '/dashboard/analytics'
+    | '/dashboard/instagram'
     | '/dashboard/tiktok'
     | '/dashboard/'
+    | '/dashboard/instagram/repost'
     | '/dashboard/tiktok/like'
     | '/dashboard/tiktok/repost'
     | '/dashboard/instagram/'
@@ -185,6 +208,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAnalyticsRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
+    '/dashboard/instagram': {
+      id: '/dashboard/instagram'
+      path: '/instagram'
+      fullPath: '/dashboard/instagram'
+      preLoaderRoute: typeof DashboardInstagramRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
     '/dashboard/tiktok': {
       id: '/dashboard/tiktok'
       path: '/tiktok'
@@ -194,10 +224,17 @@ declare module '@tanstack/react-router' {
     }
     '/dashboard/instagram/': {
       id: '/dashboard/instagram/'
-      path: '/instagram'
+      path: '/'
       fullPath: '/dashboard/instagram/'
       preLoaderRoute: typeof DashboardInstagramIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardInstagramRoute
+    }
+    '/dashboard/instagram/repost': {
+      id: '/dashboard/instagram/repost'
+      path: '/repost'
+      fullPath: '/dashboard/instagram/repost'
+      preLoaderRoute: typeof DashboardInstagramRepostRouteImport
+      parentRoute: typeof DashboardInstagramRoute
     }
     '/dashboard/tiktok/': {
       id: '/dashboard/tiktok/'
@@ -223,6 +260,19 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface DashboardInstagramRouteChildren {
+  DashboardInstagramRepostRoute: typeof DashboardInstagramRepostRoute
+  DashboardInstagramIndexRoute: typeof DashboardInstagramIndexRoute
+}
+
+const DashboardInstagramRouteChildren: DashboardInstagramRouteChildren = {
+  DashboardInstagramRepostRoute: DashboardInstagramRepostRoute,
+  DashboardInstagramIndexRoute: DashboardInstagramIndexRoute,
+}
+
+const DashboardInstagramRouteWithChildren =
+  DashboardInstagramRoute._addFileChildren(DashboardInstagramRouteChildren)
+
 interface DashboardTiktokRouteChildren {
   DashboardTiktokLikeRoute: typeof DashboardTiktokLikeRoute
   DashboardTiktokRepostRoute: typeof DashboardTiktokRepostRoute
@@ -242,17 +292,17 @@ const DashboardTiktokRouteWithChildren = DashboardTiktokRoute._addFileChildren(
 interface DashboardRouteRouteChildren {
   DashboardAccountsRoute: typeof DashboardAccountsRoute
   DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
+  DashboardInstagramRoute: typeof DashboardInstagramRouteWithChildren
   DashboardTiktokRoute: typeof DashboardTiktokRouteWithChildren
   DashboardIndexRoute: typeof DashboardIndexRoute
-  DashboardInstagramIndexRoute: typeof DashboardInstagramIndexRoute
 }
 
 const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardAccountsRoute: DashboardAccountsRoute,
   DashboardAnalyticsRoute: DashboardAnalyticsRoute,
+  DashboardInstagramRoute: DashboardInstagramRouteWithChildren,
   DashboardTiktokRoute: DashboardTiktokRouteWithChildren,
   DashboardIndexRoute: DashboardIndexRoute,
-  DashboardInstagramIndexRoute: DashboardInstagramIndexRoute,
 }
 
 const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(

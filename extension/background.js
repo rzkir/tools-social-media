@@ -189,6 +189,7 @@ const state = {
   running: false,
   status: "idle",
   mode: null,
+  platform: null,
   progress: { done: 0, failed: 0, total: 0, listed: 0, page: 0 },
   lastError: null,
   startedAt: null,
@@ -218,6 +219,26 @@ async function findTikTokTab(uniqueId) {
     const match = tabs.find((t) =>
       (t.url || "").toLowerCase().includes(needle),
     );
+    if (match?.id) return match.id;
+  }
+  if (tabs[0]?.id) return tabs[0].id;
+  return null;
+}
+
+async function findInstagramTab(uniqueId) {
+  const tabs = await chrome.tabs.query({
+    url: ["https://www.instagram.com/*", "https://*.instagram.com/*"],
+  });
+  if (uniqueId) {
+    const needle = `/${String(uniqueId).replace(/^@/, "").toLowerCase()}`;
+    const match = tabs.find((t) => {
+      const path = (t.url || "").toLowerCase();
+      return (
+        path.includes(needle + "/") ||
+        path.endsWith(needle) ||
+        path.includes(needle + "?")
+      );
+    });
     if (match?.id) return match.id;
   }
   if (tabs[0]?.id) return tabs[0].id;
@@ -759,6 +780,10 @@ function normalizeMode(mode) {
   return "repost";
 }
 
+function normalizePlatform(platform) {
+  return platform === "instagram" ? "instagram" : "tiktok";
+}
+
 /**
  * Open / navigate TikTok profile in a background tab — never steal focus
  * from the dashboard tab the user is on.
@@ -780,22 +805,25 @@ async function ensureTikTokTab(uniqueId, mode) {
   return tabId;
 }
 
-function waitTabComplete(tabId) {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      chrome.tabs.onUpdated.removeListener(listener);
-      resolve();
-    }, 20000);
+async function ensureInstagramTab(uniqueId) {
+  const handle = String(uniqueId || "")
+    .replace(/^@/, "")
+    .trim();
+  const url = handle
+    ? `https://www.instagram.com/${handle}/`
+    : "https://www.instagram.com/";
+  let tabId = await findInstagramTab(handle);
 
-    function listener(id, info) {
-      if (id === tabId && info.status === "complete") {
-        clearTimeout(timeout);
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-    }
-    chrome.tabs.onUpdated.addListener(listener);
-  });
+  if (!tabId) {
+    const tab = await chrome.tabs.create({ url, active: false });
+    tabId = tab.id;
+    await waitTabComplete(tabId);
+    return tabId;
+  }
+
+  await chrome.tabs.update(tabId, { url, active: false });
+  await waitTabComplete(tabId);
+  return tabId;
 }
 
 function sendPing(tabId) {
@@ -814,16 +842,22 @@ function sendPing(tabId) {
   });
 }
 
-function isCurrentContentScript(res) {
-  return Boolean(res?.ok && Number(res.version) === CS_VERSION);
+function isCurrentContentScript(res, platform = "tiktok") {
+  if (!res?.ok) return false;
+  if (platform === "instagram") {
+    return Number(res.version) === IG_CS_VERSION;
+  }
+  return Number(res.version) === CS_VERSION;
 }
+
+const IG_CS_VERSION = 1;
 
 async function ensureTikTokContentScript(tabId) {
   let sawStale = false;
   for (let i = 0; i < 16; i++) {
     const res = await sendPing(tabId);
-    if (isCurrentContentScript(res)) return { ok: true };
-    if (res?.ok && !isCurrentContentScript(res)) {
+    if (isCurrentContentScript(res, "tiktok")) return { ok: true };
+    if (res?.ok && !isCurrentContentScript(res, "tiktok")) {
       sawStale = true;
       // Stale CS from before extension reload — force reinject, don't bail
       try {
@@ -850,6 +884,37 @@ async function ensureTikTokContentScript(tabId) {
   return { ok: false, stale: sawStale };
 }
 
+async function ensureInstagramContentScript(tabId) {
+  let sawStale = false;
+  for (let i = 0; i < 16; i++) {
+    const res = await sendPing(tabId);
+    if (isCurrentContentScript(res, "instagram")) return { ok: true };
+    if (res?.ok && !isCurrentContentScript(res, "instagram")) {
+      sawStale = true;
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["content-instagram.js"],
+        });
+      } catch {
+        // page may still be loading
+      }
+      await sleep(700);
+      continue;
+    }
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content-instagram.js"],
+      });
+    } catch {
+      // page may still be loading / restricted
+    }
+    await sleep(i < 4 ? 400 : 800);
+  }
+  return { ok: false, stale: sawStale };
+}
+
 async function reloadTabForFreshScript(tabId) {
   await chrome.tabs.reload(tabId);
   await waitTabComplete(tabId);
@@ -859,7 +924,7 @@ async function reloadTabForFreshScript(tabId) {
 
 async function startOnTikTokTab(tabId, payload) {
   const mode = normalizeMode(payload.mode);
-  const runPayload = { ...payload, mode };
+  const runPayload = { ...payload, mode, platform: "tiktok" };
 
   // Persist so a fresh content-script load can auto-resume with correct mode
   await chrome.storage.session.set({ rrPendingRun: runPayload });
@@ -899,6 +964,351 @@ async function startOnTikTokTab(tabId, payload) {
   }
 }
 
+async function startOnInstagramTab(tabId, payload) {
+  const runPayload = {
+    ...payload,
+    mode: "repost",
+    platform: "instagram",
+  };
+
+  await chrome.storage.session.set({ rrPendingIgRun: runPayload });
+  await reloadTabForFreshScript(tabId);
+
+  let ready = await ensureInstagramContentScript(tabId);
+  if (!ready.ok) {
+    await reloadTabForFreshScript(tabId);
+    ready = await ensureInstagramContentScript(tabId);
+  }
+  if (!ready.ok) {
+    throw new Error(
+      ready.stale
+        ? "Ekstensi perlu di-reload. Buka chrome://extensions → Reload, refresh tab Instagram, lalu Start lagi."
+        : "Tab Instagram belum siap. Buka/refresh tab instagram.com (login), reload ekstensi, lalu Start lagi.",
+    );
+  }
+
+  const { rrPendingIgRun } = await chrome.storage.session.get([
+    "rrPendingIgRun",
+  ]);
+  if (!rrPendingIgRun) return;
+
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: "RR_RUN",
+      uniqueId: runPayload.uniqueId,
+      secUid: runPayload.secUid,
+      delayMs: runPayload.delayMs,
+      mode: "repost",
+      platform: "instagram",
+    });
+    await chrome.storage.session.remove("rrPendingIgRun");
+  } catch {
+    // leave rrPendingIgRun for a later CS load
+  }
+}
+
+async function collectCookieJar(queries) {
+  const jar = {};
+  const seen = new Set();
+  for (const query of queries) {
+    let list = [];
+    try {
+      list = await chrome.cookies.getAll(query);
+    } catch {
+      continue;
+    }
+    for (const c of list) {
+      if (!c?.name) continue;
+      const key = `${c.name}\0${c.domain || ""}\0${c.path || "/"}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const prev = jar[c.name];
+      if (!prev || String(c.value || "").length > String(prev).length) {
+        jar[c.name] = c.value || "";
+      }
+    }
+  }
+  return jar;
+}
+
+const IG_ORIGIN = "https://www.instagram.com";
+const IG_APP_ID = "936619673304451";
+const IG_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+function decodeCookieValue(raw) {
+  const value = String(raw || "").trim();
+  if (!value || !/%[0-9A-Fa-f]{2}/.test(value)) return value;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function parseInstagramCookieHeader(cookieHeader) {
+  const jar = {};
+  for (const part of String(cookieHeader || "").split(/;\s*/)) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const key = part.slice(0, eq).trim();
+    const value = decodeCookieValue(part.slice(eq + 1).trim());
+    if (key && value) jar[key] = value;
+  }
+  return jar;
+}
+
+function buildInstagramCookieHeaderFromJar(jar) {
+  return ["sessionid", "ds_user_id", "csrftoken", "mid", "ig_did", "datr", "rur"]
+    .filter((key) => jar[key])
+    .map((key) => `${key}=${jar[key]}`)
+    .join("; ");
+}
+
+function normalizeInstagramCookieHeader(cookieHeader) {
+  return buildInstagramCookieHeaderFromJar(
+    parseInstagramCookieHeader(cookieHeader),
+  );
+}
+
+function mapInstagramUser(user, fallbackId) {
+  if (!user || typeof user !== "object") return null;
+  const username = String(user.username || "")
+    .trim()
+    .replace(/^@/, "");
+  const pk = String(user.pk || user.id || fallbackId || "").trim();
+  const nickname =
+    typeof user.full_name === "string" && user.full_name.trim()
+      ? user.full_name.trim()
+      : username;
+  const avatarUrl =
+    (typeof user.profile_pic_url_hd === "string" && user.profile_pic_url_hd) ||
+    (typeof user.profile_pic_url === "string" && user.profile_pic_url) ||
+    "";
+  if (!username) return null;
+  return { uniqueId: username, secUid: pk, nickname, avatarUrl };
+}
+
+async function fetchInstagramJson(path, options = {}) {
+  const {
+    cookieHeader = "",
+    csrftoken = "",
+    referer = `${IG_ORIGIN}/`,
+    useBrowserCookies = false,
+  } = options;
+
+  const headers = {
+    accept: "*/*",
+    "accept-language": "en-US,en;q=0.9",
+    origin: IG_ORIGIN,
+    referer,
+    "user-agent": IG_USER_AGENT,
+    "x-csrftoken": csrftoken,
+    "x-ig-app-id": IG_APP_ID,
+    "x-requested-with": "XMLHttpRequest",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+  };
+  if (!useBrowserCookies && cookieHeader) {
+    headers.cookie = cookieHeader;
+  }
+
+  const res = await fetch(`${IG_ORIGIN}${path}`, {
+    headers,
+    credentials: useBrowserCookies ? "include" : "omit",
+  });
+  const text = await res.text();
+  if (!text.trim()) {
+    return { ok: false, status: res.status, error: "empty" };
+  }
+  try {
+    return { ok: res.ok, status: res.status, json: JSON.parse(text) };
+  } catch {
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, status: res.status, error: "auth" };
+    }
+    return { ok: false, status: res.status, error: "not_json" };
+  }
+}
+
+function pickUserFromInstagramHtml(html, hint, dsUserId) {
+  const text = String(html || "");
+  if (!text) return null;
+
+  const usernameMatch =
+    text.match(/"username":"([^"]+)"/) ||
+    text.match(/"user_name":"([^"]+)"/);
+  const idMatch =
+    text.match(/"profile_page_id":"(\d+)"/) ||
+    text.match(/"id":"(\d+)","username"/) ||
+    text.match(/"pk":"(\d+)"/);
+  const nameMatch = text.match(/"full_name":"([^"]*)"/);
+  const avatarMatch =
+    text.match(/"profile_pic_url_hd":"([^"]+)"/) ||
+    text.match(/"profile_pic_url":"([^"]+)"/);
+
+  const username = String(usernameMatch?.[1] || hint || "")
+    .trim()
+    .replace(/^@/, "");
+  const pk = String(idMatch?.[1] || dsUserId || "").trim();
+  if (!username) return null;
+
+  let avatarUrl = avatarMatch?.[1] || "";
+  if (avatarUrl) {
+    avatarUrl = avatarUrl.replace(/\\u0026/g, "&").replace(/\\\//g, "/");
+  }
+
+  return {
+    uniqueId: username,
+    secUid: pk,
+    nickname: nameMatch?.[1] || username,
+    avatarUrl,
+  };
+}
+
+async function fetchInstagramProfileHtml(username, options = {}) {
+  const handle = String(username || "")
+    .replace(/^@/, "")
+    .trim();
+  if (!handle) return null;
+
+  const { cookieHeader = "", useBrowserCookies = false } = options;
+  const headers = {
+    accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "accept-language": "en-US,en;q=0.9",
+    "user-agent": IG_USER_AGENT,
+    referer: `${IG_ORIGIN}/`,
+  };
+  if (!useBrowserCookies && cookieHeader) {
+    headers.cookie = cookieHeader;
+  }
+
+  try {
+    const res = await fetch(`${IG_ORIGIN}/${encodeURIComponent(handle)}/`, {
+      headers,
+      credentials: useBrowserCookies ? "include" : "omit",
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+async function verifyInstagramSession(cookies, usernameHint, avatarHint) {
+  const hint = String(usernameHint || "")
+    .replace(/^@/, "")
+    .trim();
+
+  const browserJar = await collectCookieJar([
+    { domain: "instagram.com" },
+    { url: "https://www.instagram.com" },
+    { url: "https://instagram.com" },
+  ]);
+  const manualJar = parseInstagramCookieHeader(cookies || "");
+  const jar = { ...manualJar, ...browserJar };
+  const cookieHeader = buildInstagramCookieHeaderFromJar(jar);
+  const sessionid = jar.sessionid || jar.sessionId || "";
+  const csrftoken = jar.csrftoken || "";
+  const dsUserId = jar.ds_user_id || "";
+
+  if (!sessionid) {
+    return { ok: false, error: "Cookie sessionid wajib diisi." };
+  }
+  if (!csrftoken) {
+    return {
+      ok: false,
+      error:
+        "Cookie csrftoken wajib diisi. Ambil ulang cookie dari browser setelah login Instagram.",
+    };
+  }
+
+  const finish = (user) => {
+    if (!user?.uniqueId) return null;
+    if (hint && user.uniqueId.toLowerCase() !== hint.toLowerCase()) {
+      return {
+        ok: false,
+        error: `Cookie milik @${user.uniqueId}, bukan @${hint}. Perbarui cookie atau username.`,
+      };
+    }
+    if (!user.avatarUrl && avatarHint) user.avatarUrl = avatarHint;
+    return { ok: true, user };
+  };
+
+  const attempts = [
+    { useBrowserCookies: true, cookieHeader: "" },
+    { useBrowserCookies: false, cookieHeader },
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const current = await fetchInstagramJson(
+        "/api/v1/accounts/current_user/?edit=true",
+        {
+          ...attempt,
+          csrftoken,
+        },
+      );
+      const currentUser = current.json?.user;
+      if (currentUser) {
+        const user = mapInstagramUser(currentUser, dsUserId);
+        const result = finish(user);
+        if (result) return result;
+      }
+    } catch {
+      // try next
+    }
+  }
+
+  if (hint) {
+    for (const attempt of attempts) {
+      try {
+        const profile = await fetchInstagramJson(
+          `/api/v1/users/web_profile_info/?username=${encodeURIComponent(hint)}`,
+          {
+            ...attempt,
+            csrftoken,
+            referer: `${IG_ORIGIN}/${encodeURIComponent(hint)}/`,
+          },
+        );
+        const profileUser = profile.json?.data?.user;
+        if (profileUser) {
+          const user = mapInstagramUser(profileUser, dsUserId);
+          if (user) {
+            const profileId = String(profileUser.id || profileUser.pk || "").trim();
+            if (dsUserId && profileId && dsUserId !== profileId) {
+              return {
+                ok: false,
+                error: `Cookie ds_user_id (${dsUserId}) tidak cocok dengan profil @${hint} (${profileId}). Pastikan cookie dari akun yang sama.`,
+              };
+            }
+            const result = finish(user);
+            if (result) return result;
+          }
+        }
+      } catch {
+        // try next
+      }
+    }
+
+    for (const attempt of attempts) {
+      const html = await fetchInstagramProfileHtml(hint, attempt);
+      const user = pickUserFromInstagramHtml(html, hint, dsUserId);
+      const result = finish(user);
+      if (result) return result;
+    }
+  }
+
+  return {
+    ok: false,
+    error:
+      "Gagal verifikasi cookie Instagram. Pastikan sessionid, ds_user_id, dan csrftoken masih valid — login ulang di instagram.com lalu export cookie baru.",
+  };
+}
+
 async function handleMessage(msg, sender) {
   if (msg?.type === "PING") {
     return { ok: true, extension: true, state };
@@ -924,16 +1334,12 @@ async function handleMessage(msg, sender) {
 
   if (msg?.type === "GET_INSTAGRAM_COOKIES") {
     try {
-      const list = await chrome.cookies.getAll({ domain: "instagram.com" });
-      const jar = {};
-      for (const c of list) {
-        if (!c?.name) continue;
-        const prev = jar[c.name];
-        if (!prev || String(c.value || "").length > String(prev).length) {
-          jar[c.name] = c.value || "";
-        }
-      }
-      const sessionid = jar.sessionid || "";
+      const jar = await collectCookieJar([
+        { domain: "instagram.com" },
+        { url: "https://www.instagram.com" },
+        { url: "https://instagram.com" },
+      ]);
+      const sessionid = jar.sessionid || jar.sessionId || "";
       const ds_user_id = jar.ds_user_id || "";
       const csrftoken = jar.csrftoken || "";
       if (!sessionid) {
@@ -990,19 +1396,40 @@ async function handleMessage(msg, sender) {
           "Cookie terisi. Isi username Instagram lalu klik Verifikasi & Connect.";
       }
 
+      let avatarUrl = "";
+      if (sessionid && ds_user_id && csrftoken) {
+        try {
+          const verified = await verifyInstagramSession(
+            buildInstagramCookieHeaderFromJar(jar),
+            username,
+            "",
+          );
+          if (verified.ok && verified.user) {
+            username = verified.user.uniqueId || username;
+            avatarUrl = verified.user.avatarUrl || "";
+            if (!ds_user_id && verified.user.secUid) {
+              jar.ds_user_id = verified.user.secUid;
+            }
+            warning = "";
+          }
+        } catch {
+          // cookies still usable for manual verify
+        }
+      }
+
       return {
         ok: true,
         cookies: jar,
         warning: warning || undefined,
         values: {
-          sessionid,
-          ds_user_id,
-          csrftoken,
-          mid: jar.mid || "",
-          ig_did: jar.ig_did || "",
-          datr: jar.datr || "",
+          sessionid: decodeCookieValue(sessionid),
+          ds_user_id: decodeCookieValue(jar.ds_user_id || ds_user_id),
+          csrftoken: decodeCookieValue(csrftoken),
+          mid: decodeCookieValue(jar.mid || ""),
+          ig_did: decodeCookieValue(jar.ig_did || ""),
+          datr: decodeCookieValue(jar.datr || ""),
           username,
-          avatarUrl: "",
+          avatarUrl,
         },
       };
     } catch (err) {
@@ -1016,18 +1443,30 @@ async function handleMessage(msg, sender) {
     }
   }
 
+  if (msg?.type === "VERIFY_INSTAGRAM_SESSION") {
+    try {
+      return await verifyInstagramSession(
+        msg.cookies,
+        msg.username,
+        msg.avatarHint,
+      );
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Gagal verifikasi cookie Instagram dari browser.",
+      };
+    }
+  }
+
   if (msg?.type === "GET_TIKTOK_COOKIES") {
     try {
-      const list = await chrome.cookies.getAll({ domain: "tiktok.com" });
-      const jar = {};
-      for (const c of list) {
-        if (!c?.name) continue;
-        // Prefer non-empty / longer values if duplicates exist
-        const prev = jar[c.name];
-        if (!prev || String(c.value || "").length > String(prev).length) {
-          jar[c.name] = c.value || "";
-        }
-      }
+      const jar = await collectCookieJar([
+        { domain: "tiktok.com" },
+        { url: "https://www.tiktok.com" },
+      ]);
       const sessionid = jar.sessionid || jar.sessionid_ss || "";
       const msToken = jar.msToken || "";
       if (!sessionid) {
@@ -1106,6 +1545,7 @@ async function handleMessage(msg, sender) {
     const secUid = String(msg.secUid || "").trim();
     const delayMs = Math.max(500, Number(msg.delayMs) || 1500);
     const mode = normalizeMode(msg.mode);
+    const platform = normalizePlatform(msg.platform);
 
     if (!uniqueId) {
       return { ok: false, error: "Username wajib diisi." };
@@ -1114,6 +1554,7 @@ async function handleMessage(msg, sender) {
     state.running = true;
     state.status = "starting";
     state.mode = mode;
+    state.platform = platform;
     state.lastError = null;
     // Delete timer starts only on CONFIRM_REMOVE
     state.startedAt = null;
@@ -1122,18 +1563,25 @@ async function handleMessage(msg, sender) {
     await broadcast({ type: "RR_STATE", state });
 
     try {
-      const tabId = await ensureTikTokTab(uniqueId, mode);
-      await sleep(400);
-      await startOnTikTokTab(tabId, { uniqueId, secUid, delayMs, mode });
+      if (platform === "instagram") {
+        const tabId = await ensureInstagramTab(uniqueId);
+        await sleep(400);
+        await startOnInstagramTab(tabId, { uniqueId, secUid, delayMs, mode });
+      } else {
+        const tabId = await ensureTikTokTab(uniqueId, mode);
+        await sleep(400);
+        await startOnTikTokTab(tabId, { uniqueId, secUid, delayMs, mode });
+      }
       return { ok: true, state };
     } catch (err) {
       state.running = false;
       state.status = "error";
       state.endedAt = Date.now();
       const raw = err instanceof Error ? err.message : String(err);
+      const site = platform === "instagram" ? "Instagram" : "TikTok";
       state.lastError =
         raw.includes("Receiving end") || raw.includes("Could not establish")
-          ? "Tab TikTok belum siap. Refresh tab tiktok.com, pastikan login, lalu Start lagi."
+          ? `Tab ${site} belum siap. Refresh tab, pastikan login, lalu Start lagi.`
           : raw;
       await broadcast({ type: "RR_STATE", state });
       return { ok: false, error: state.lastError, state };
@@ -1142,6 +1590,7 @@ async function handleMessage(msg, sender) {
 
   if (msg?.type === "PROGRESS") {
     if (msg.mode) state.mode = msg.mode;
+    if (msg.platform) state.platform = normalizePlatform(msg.platform);
     state.status = msg.status || state.status;
     if (msg.progress) state.progress = { ...state.progress, ...msg.progress };
     if (msg.error) state.lastError = msg.error;
@@ -1163,11 +1612,17 @@ async function handleMessage(msg, sender) {
 
   if (msg?.type === "CONFIRM_REMOVE") {
     const limit = Math.max(1, Number(msg.limit) || 1);
-    const tabs = await chrome.tabs.query({
-      url: ["https://www.tiktok.com/*", "https://*.tiktok.com/*"],
-    });
+    const platform = normalizePlatform(msg.platform || state.platform);
+    const urlPatterns =
+      platform === "instagram"
+        ? ["https://www.instagram.com/*", "https://*.instagram.com/*"]
+        : ["https://www.tiktok.com/*", "https://*.tiktok.com/*"];
+    const tabs = await chrome.tabs.query({ url: urlPatterns });
     let sent = false;
-    let lastError = "Tab TikTok tidak ditemukan.";
+    let lastError =
+      platform === "instagram"
+        ? "Tab Instagram tidak ditemukan."
+        : "Tab TikTok tidak ditemukan.";
     for (const tab of tabs) {
       if (!tab.id) continue;
       try {
@@ -1179,6 +1634,7 @@ async function handleMessage(msg, sender) {
           sent = true;
           state.status = "removing";
           state.running = true;
+          state.platform = platform;
           // Timer starts when user confirms delete, not during listing
           state.startedAt = Date.now();
           state.endedAt = null;

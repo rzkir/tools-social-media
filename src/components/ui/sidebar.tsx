@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
 	BarChart3,
+	Instagram,
 	Layers,
 	LayoutDashboard,
 	LogOut,
@@ -15,7 +16,8 @@ export type SidebarActiveItem =
 	| "dashboard"
 	| "analytics"
 	| "accounts"
-	| "tiktok";
+	| "tiktok"
+	| "instagram";
 
 type NavItem = {
 	id: SidebarActiveItem;
@@ -24,7 +26,8 @@ type NavItem = {
 		| "/dashboard"
 		| "/dashboard/analytics"
 		| "/dashboard/accounts"
-		| "/dashboard/tiktok";
+		| "/dashboard/tiktok"
+		| "/dashboard/instagram";
 	icon: LucideIcon;
 };
 
@@ -43,11 +46,18 @@ const NAV_ITEMS: NavItem[] = [
 	},
 	{ id: "accounts", label: "Accounts", to: "/dashboard/accounts", icon: Users },
 	{ id: "tiktok", label: "TikTok Tool", to: "/dashboard/tiktok", icon: Music2 },
+	{
+		id: "instagram",
+		label: "Instagram Tool",
+		to: "/dashboard/instagram",
+		icon: Instagram,
+	},
 ];
 
 function activeFromPath(pathname: string): SidebarActiveItem {
 	if (pathname.startsWith("/dashboard/analytics")) return "analytics";
 	if (pathname.startsWith("/dashboard/accounts")) return "accounts";
+	if (pathname.startsWith("/dashboard/instagram")) return "instagram";
 	if (pathname.startsWith("/dashboard/tiktok")) return "tiktok";
 	return "dashboard";
 }
@@ -90,6 +100,7 @@ export function Sidebar({
 				{NAV_ITEMS.map((item) => {
 					const Icon = item.icon;
 					const isActive = activeItem === item.id;
+					const isInstagram = item.id === "instagram";
 					return (
 						<Link
 							key={item.id}
@@ -97,8 +108,11 @@ export function Sidebar({
 							className={cn(
 								"flex items-center gap-3 rounded-2xl px-4 py-3 font-medium no-underline transition-all",
 								isActive
-									? "bg-white text-indigo-600 shadow-[0_4px_12px_-2px_rgba(124,58,237,0.1)]"
+									? isInstagram
+										? "bg-white text-pink-600 shadow-[0_4px_12px_-2px_rgba(219,39,119,0.12)]"
+										: "bg-white text-indigo-600 shadow-[0_4px_12px_-2px_rgba(124,58,237,0.1)]"
 									: "text-slate-500 hover:bg-white hover:text-indigo-600",
+								!isActive && isInstagram && "hover:text-pink-600",
 							)}
 						>
 							<Icon className="h-5 w-5" />
