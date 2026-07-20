@@ -2,23 +2,29 @@ import { Instagram, Music2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAlertStatus } from "#/components/dialog/alert-status.dialog";
 import {
+	buildInstagramCookieHeader,
+	EMPTY_INSTAGRAM_COOKIE_VALUES,
+	InstagramCookieForm,
+	type InstagramCookieValues,
+} from "#/components/InstagramCookieForm";
+import {
 	buildCookieHeader,
 	EMPTY_COOKIE_VALUES,
 	TikTokCookieForm,
 	type TikTokCookieValues,
 } from "#/components/TikTokCookieForm";
-import { Button } from "#/components/ui/button";
 import { Dialog } from "#/components/ui/dialog";
-import { Field, FieldLabel } from "#/components/ui/field";
 import { TabsNavigation } from "#/components/ui/tabs-navigation";
-import {
-	useClearCookieSession,
-	useCookieSession,
-	useRecordConnect,
-	useSaveCookieSession,
-} from "#/hooks/use-session";
+import { useVerifyInstagramSession } from "#/hooks/use-instagram";
+import { useRemoveAccount } from "#/hooks/use-session";
 import { useVerifySession } from "#/hooks/use-tiktok";
-import type { AccountBridge, AccountPlatform } from "#/lib/session-store";
+import {
+	type AccountBridge,
+	type AccountPlatform,
+	getAccountById,
+	isInstagramAccount,
+	isTikTokAccount,
+} from "#/lib/session-store";
 import type { TikTokUser } from "#/types/tiktok";
 
 const PLATFORM_TABS = [
@@ -29,102 +35,114 @@ const PLATFORM_TABS = [
 export type AccountsDialogProps = {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	/** When set, dialog edits that account instead of adding a new one. */
+	editAccountId?: string | null;
+	defaultPlatform?: AccountPlatform;
 	onConnected?: (payload: {
 		user: TikTokUser | null;
 		platform: AccountPlatform;
 		bridge: AccountBridge;
+		accountId: string;
 	}) => void;
 };
 
 export function AccountsDialog({
 	open,
 	onOpenChange,
+	editAccountId = null,
+	defaultPlatform = "tiktok",
 	onConnected,
 }: AccountsDialogProps) {
-	const [platform, setPlatform] = useState<AccountPlatform>("tiktok");
+	const [platform, setPlatform] = useState<AccountPlatform>(defaultPlatform);
+	const [editingId, setEditingId] = useState<string | null>(null);
 	const [cookieValues, setCookieValues] =
 		useState<TikTokCookieValues>(EMPTY_COOKIE_VALUES);
-	const [igUsername, setIgUsername] = useState("");
-	const [igCookie, setIgCookie] = useState("");
+	const [igCookieValues, setIgCookieValues] = useState<InstagramCookieValues>(
+		EMPTY_INSTAGRAM_COOKIE_VALUES,
+	);
 	const [user, setUser] = useState<TikTokUser | null>(null);
 	const [hydrated, setHydrated] = useState(false);
 	const statusAlert = useAlertStatus();
 
-	const { data: session, isLoading: sessionLoading } = useCookieSession();
-	const saveSession = useSaveCookieSession();
-	const clearSession = useClearCookieSession();
+	const removeAccount = useRemoveAccount();
 	const verifySession = useVerifySession();
-	const recordConnect = useRecordConnect();
+	const verifyInstagramSession = useVerifyInstagramSession();
 
 	const cookies = useMemo(
 		() => buildCookieHeader(cookieValues),
 		[cookieValues],
 	);
+	const igCookies = useMemo(
+		() => buildInstagramCookieHeader(igCookieValues),
+		[igCookieValues],
+	);
 
 	const busy = verifySession.isPending
 		? "verify"
-		: clearSession.isPending
-			? "load"
-			: "idle";
+		: verifyInstagramSession.isPending
+			? "verify"
+			: removeAccount.isPending
+				? "load"
+				: "idle";
 
 	useEffect(() => {
 		if (!open) {
 			setHydrated(false);
 			return;
 		}
-		if (hydrated || sessionLoading) return;
-		if (session) {
-			setCookieValues(session.cookies);
-			setUser(session.user);
-			setPlatform(session.platform);
-			if (session.platform === "instagram") {
-				setIgUsername(session.user?.uniqueId || session.cookies.username || "");
-				setIgCookie(session.cookies.sessionid || "");
+		if (hydrated) return;
+
+		const existing = editAccountId ? getAccountById(editAccountId) : null;
+		if (existing) {
+			setEditingId(existing.id);
+			setPlatform(existing.platform);
+			setUser(existing.user);
+			if (isTikTokAccount(existing)) {
+				setCookieValues(existing.cookies);
+				setIgCookieValues(EMPTY_INSTAGRAM_COOKIE_VALUES);
+			} else if (isInstagramAccount(existing)) {
+				setIgCookieValues(existing.cookies);
+				setCookieValues(EMPTY_COOKIE_VALUES);
 			}
+		} else {
+			setEditingId(null);
+			setPlatform(defaultPlatform);
+			setUser(null);
+			setCookieValues(EMPTY_COOKIE_VALUES);
+			setIgCookieValues(EMPTY_INSTAGRAM_COOKIE_VALUES);
 		}
 		setHydrated(true);
-	}, [open, session, sessionLoading, hydrated]);
-
-	useEffect(() => {
-		if (!hydrated || !open) return;
-		if (platform !== "tiktok") return;
-		saveSession.mutate({
-			cookies: cookieValues,
-			user,
-			meta: {
-				platform: "tiktok",
-				bridge: "cookie",
-			},
-		});
-		// Draft persist — omit saveSession from deps to avoid re-fire loops
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [cookieValues, user, platform, hydrated, open]);
+	}, [open, editAccountId, defaultPlatform, hydrated]);
 
 	const emitConnected = (
 		nextUser: TikTokUser | null,
 		nextPlatform: AccountPlatform,
 		nextBridge: AccountBridge,
+		accountId: string,
 	) => {
 		onConnected?.({
 			user: nextUser,
 			platform: nextPlatform,
 			bridge: nextBridge,
+			accountId,
 		});
 	};
 
-	const onVerify = () => {
+	const onVerifyTikTok = () => {
 		verifySession.mutate(
 			{
 				cookies,
 				uniqueId: cookieValues.username.trim() || undefined,
 				secUid: cookieValues.secUid.trim() || undefined,
 				cookieValues,
+				accountId: editingId || undefined,
 			},
 			{
 				onSuccess: (result) => {
 					setCookieValues(result.cookieValues);
 					setUser(result.user);
-					emitConnected(result.user, "tiktok", "cookie");
+					setEditingId(result.accountId);
+					emitConnected(result.user, "tiktok", "cookie", result.accountId);
 					statusAlert.success(
 						"Akun terhubung",
 						`Berhasil connect @${result.user.uniqueId}.`,
@@ -141,68 +159,60 @@ export function AccountsDialog({
 		);
 	};
 
-	const onClearSession = () => {
-		clearSession.mutate(
-			{ recordMetrics: true },
+	const onVerifyInstagram = () => {
+		verifyInstagramSession.mutate(
 			{
-				onSuccess: () => {
-					setCookieValues(EMPTY_COOKIE_VALUES);
-					setUser(null);
-					setIgUsername("");
-					setIgCookie("");
-					emitConnected(null, platform, "cookie");
-					statusAlert.info(
-						"Session dihapus",
-						"Cookie & profil akun sudah dibersihkan.",
+				cookies: igCookies,
+				username: igCookieValues.username.trim() || undefined,
+				cookieValues: igCookieValues,
+				accountId: editingId || undefined,
+			},
+			{
+				onSuccess: (result) => {
+					setIgCookieValues(result.cookieValues);
+					setUser(result.user);
+					setEditingId(result.accountId);
+					emitConnected(
+						result.user,
+						"instagram",
+						"cookie",
+						result.accountId,
+					);
+					statusAlert.success(
+						"Instagram terhubung",
+						`Berhasil connect @${result.user.uniqueId}.`,
+					);
+					onOpenChange(false);
+				},
+				onError: (err) => {
+					statusAlert.error(
+						"Verifikasi gagal",
+						err instanceof Error ? err.message : "Gagal verifikasi Instagram",
 					);
 				},
 			},
 		);
 	};
 
-	const onSaveInstagram = () => {
-		const username = igUsername.trim().replace(/^@/, "");
-		if (!username) {
-			statusAlert.warning("Username wajib", "Isi username Instagram dulu.");
+	const onClearSession = () => {
+		if (!editingId) {
+			setCookieValues(EMPTY_COOKIE_VALUES);
+			setIgCookieValues(EMPTY_INSTAGRAM_COOKIE_VALUES);
+			setUser(null);
+			statusAlert.info("Form dikosongkan", "Isi cookie lalu verifikasi.");
 			return;
 		}
-		if (!igCookie.trim()) {
-			statusAlert.warning(
-				"Cookie wajib",
-				"Tempel cookie Instagram (minimal sessionid).",
-			);
-			return;
-		}
-		const nextCookies: TikTokCookieValues = {
-			...EMPTY_COOKIE_VALUES,
-			username,
-			sessionid: igCookie.trim(),
-		};
-		const nextUser: TikTokUser = {
-			uniqueId: username,
-			secUid: "",
-			nickname: username,
-			avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(username)}`,
-		};
-		saveSession.mutate(
-			{
-				cookies: nextCookies,
-				user: nextUser,
-				meta: { platform: "instagram", bridge: "cookie" },
-			},
+		removeAccount.mutate(
+			{ id: editingId, recordMetrics: true },
 			{
 				onSuccess: () => {
-					setCookieValues(nextCookies);
-					setUser(nextUser);
-					emitConnected(nextUser, "instagram", "cookie");
-					recordConnect.mutate({
-						ok: true,
-						platform: "instagram",
-						username,
-					});
-					statusAlert.success(
-						"Instagram tersimpan",
-						`Cookie @${username} berhasil disimpan.`,
+					setCookieValues(EMPTY_COOKIE_VALUES);
+					setIgCookieValues(EMPTY_INSTAGRAM_COOKIE_VALUES);
+					setUser(null);
+					setEditingId(null);
+					statusAlert.info(
+						"Akun dihapus",
+						"Cookie & profil akun sudah dibersihkan.",
 					);
 					onOpenChange(false);
 				},
@@ -210,77 +220,60 @@ export function AccountsDialog({
 		);
 	};
 
-	const booting = open && (sessionLoading || !hydrated);
+	const booting = open && !hydrated;
+	const canSwitchPlatform = !editingId;
 
 	return (
 		<>
 			<Dialog
 				open={open}
 				onOpenChange={onOpenChange}
-				title="Connect Account"
-				description="Pilih platform, lalu hubungkan lewat cookie TikTok atau Instagram."
+				title={editingId ? "Edit Account" : "Connect Account"}
+				description={
+					editingId
+						? "Perbarui cookie akun yang dipilih. TikTok & Instagram tersimpan terpisah."
+						: "Tambah akun baru. Cookie TikTok dan Instagram tidak saling menimpa."
+				}
 			>
-				<TabsNavigation
-					className="mb-4"
-					items={PLATFORM_TABS}
-					value={platform}
-					onValueChange={setPlatform}
-				/>
+				{canSwitchPlatform ? (
+					<TabsNavigation
+						className="mb-4"
+						items={PLATFORM_TABS}
+						value={platform}
+						onValueChange={setPlatform}
+					/>
+				) : (
+					<p className="mb-4 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+						{platform === "instagram" ? "Instagram" : "TikTok"} · ID{" "}
+						{editingId}
+					</p>
+				)}
 
 				{booting ? (
-					<p className="text-sm text-slate-400">Memulihkan session…</p>
+					<p className="text-sm text-slate-400">Memulihkan form…</p>
 				) : platform === "instagram" ? (
-					<div className="space-y-4">
-						<p className="m-0 rounded-xl border border-pink-100 bg-pink-50 px-3 py-2 text-sm text-pink-900">
-							Bridge Cookie Instagram — simpan session untuk akun IG. Tools
-							hapus masih fokus TikTok.
-						</p>
-						<Field>
-							<FieldLabel htmlFor="ig-username" required>
-								Username Instagram
-							</FieldLabel>
-							<input
-								id="ig-username"
-								value={igUsername}
-								onChange={(e) => setIgUsername(e.target.value)}
-								placeholder="username"
-								className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 ring-1 ring-slate-200 outline-none"
-							/>
-						</Field>
-						<Field>
-							<FieldLabel htmlFor="ig-cookie" required>
-								Cookie Instagram
-							</FieldLabel>
-							<textarea
-								id="ig-cookie"
-								value={igCookie}
-								onChange={(e) => setIgCookie(e.target.value)}
-								placeholder="sessionid=…; ds_user_id=…; csrftoken=…"
-								rows={4}
-								className="w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 font-mono text-xs text-slate-900 ring-1 ring-slate-200 outline-none"
-							/>
-						</Field>
-						<div className="flex flex-wrap gap-2">
-							<Button onClick={onSaveInstagram} size="lg">
-								Simpan Cookie Instagram
-							</Button>
-							{user ? (
-								<Button variant="outline" onClick={onClearSession}>
-									Hapus Session
-								</Button>
-							) : null}
-						</div>
-					</div>
+					<InstagramCookieForm
+						variant="plain"
+						values={igCookieValues}
+						onChange={setIgCookieValues}
+						onVerify={onVerifyInstagram}
+						onClearSession={onClearSession}
+						busy={busy}
+						user={user}
+						error={null}
+						verifyLabel={editingId ? "Verifikasi & Update" : "Verifikasi & Connect"}
+					/>
 				) : (
 					<TikTokCookieForm
 						variant="plain"
 						values={cookieValues}
 						onChange={setCookieValues}
-						onVerify={onVerify}
+						onVerify={onVerifyTikTok}
 						onClearSession={onClearSession}
 						busy={busy}
 						user={user}
 						error={null}
+						verifyLabel={editingId ? "Verifikasi & Update" : "Verifikasi & Connect"}
 					/>
 				)}
 			</Dialog>

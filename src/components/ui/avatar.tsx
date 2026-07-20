@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { normalizeTikTokAvatarUrl } from "#/lib/tiktok-avatar";
 import { cn } from "#/lib/utils";
 
 export type AvatarProps = {
 	src?: string | null;
+	/** Tried when primary src is missing or fails to load */
+	fallbackSrc?: string | null;
 	alt?: string;
 	fallback?: string;
 	size?: "sm" | "md" | "lg";
@@ -30,18 +33,31 @@ function initials(fallback?: string) {
 
 export function Avatar({
 	src,
+	fallbackSrc,
 	alt = "",
 	fallback,
 	size = "md",
 	className,
 }: AvatarProps) {
-	const [failed, setFailed] = useState(false);
+	const primary =
+		normalizeTikTokAvatarUrl(src) ?? (src?.trim() || undefined);
+	const secondary =
+		normalizeTikTokAvatarUrl(fallbackSrc) ??
+		(fallbackSrc?.trim() || undefined);
+
+	const [stage, setStage] = useState<"primary" | "fallback" | "initials">(
+		primary ? "primary" : secondary ? "fallback" : "initials",
+	);
+	const [imageLoaded, setImageLoaded] = useState(false);
 
 	useEffect(() => {
-		setFailed(false);
-	}, [src]);
+		setStage(primary ? "primary" : secondary ? "fallback" : "initials");
+		setImageLoaded(false);
+	}, [primary, secondary]);
 
-	const showImage = Boolean(src) && !failed;
+	const imageSrc =
+		stage === "primary" ? primary : stage === "fallback" ? secondary : undefined;
+	const showInitials = !imageSrc || !imageLoaded;
 
 	return (
 		<div
@@ -51,17 +67,35 @@ export function Avatar({
 				className,
 			)}
 		>
-			{showImage ? (
+			<span
+				className={cn(
+					"absolute inset-0 flex items-center justify-center",
+					!showInitials && "opacity-0",
+				)}
+				aria-hidden={!showInitials}
+			>
+				{initials(fallback)}
+			</span>
+			{imageSrc ? (
 				<img
-					src={src!}
+					src={imageSrc}
 					alt={alt}
 					referrerPolicy="no-referrer"
-					className="h-full w-full object-cover"
-					onError={() => setFailed(true)}
+					className={cn(
+						"relative z-[1] h-full w-full object-cover",
+						!imageLoaded && "opacity-0",
+					)}
+					onLoad={() => setImageLoaded(true)}
+					onError={() => {
+						setImageLoaded(false);
+						if (stage === "primary" && secondary && secondary !== primary) {
+							setStage("fallback");
+						} else {
+							setStage("initials");
+						}
+					}}
 				/>
-			) : (
-				<span aria-hidden>{initials(fallback)}</span>
-			)}
+			) : null}
 		</div>
 	);
 }

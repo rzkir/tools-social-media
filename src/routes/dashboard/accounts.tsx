@@ -4,11 +4,15 @@ import { useState } from "react";
 import { AccountsDialog } from "#/components/dialog/accounts.dialog";
 import { AccountCard } from "#/components/ui/card";
 import { Empty } from "#/components/ui/empaty";
-import { useClearCookieSession, useCookieSession } from "#/hooks/use-session";
 import {
-	type AccountBridge,
+	useAccounts,
+	useRemoveAccount,
+	useSetActiveAccount,
+} from "#/hooks/use-session";
+import {
 	type AccountPlatform,
 	bridgeLabel,
+	isTikTokAccount,
 } from "#/lib/session-store";
 
 export const Route = createFileRoute("/dashboard/accounts")({
@@ -17,19 +21,24 @@ export const Route = createFileRoute("/dashboard/accounts")({
 
 function AccountsPage() {
 	const [dialogOpen, setDialogOpen] = useState(false);
-	const { data: session } = useCookieSession();
-	const clearSession = useClearCookieSession();
+	const [editAccountId, setEditAccountId] = useState<string | null>(null);
+	const [defaultPlatform, setDefaultPlatform] =
+		useState<AccountPlatform>("tiktok");
 
-	const user = session?.user ?? null;
-	const platform: AccountPlatform = session?.platform ?? "tiktok";
-	const bridge: AccountBridge = session?.bridge ?? "cookie";
+	const { accounts } = useAccounts();
+	const removeAccount = useRemoveAccount();
+	const setActive = useSetActiveAccount();
 
-	const onClearSession = () => {
-		clearSession.mutate({ recordMetrics: true });
+	const openAdd = (platform: AccountPlatform = "tiktok") => {
+		setEditAccountId(null);
+		setDefaultPlatform(platform);
+		setDialogOpen(true);
 	};
 
-	const connectedCount = user ? 1 : 0;
-	const label = bridgeLabel(platform, bridge);
+	const openEdit = (id: string) => {
+		setEditAccountId(id);
+		setDialogOpen(true);
+	};
 
 	return (
 		<>
@@ -40,14 +49,14 @@ function AccountsPage() {
 							Manage Accounts
 						</h2>
 						<p className="text-sm text-slate-400">
-							{connectedCount > 0
-								? `You have ${connectedCount} account connected · ${label}`
-								: "No accounts yet · connect TikTok or Instagram cookies"}
+							{accounts.length > 0
+								? `${accounts.length} akun tersimpan · TikTok & Instagram terpisah`
+								: "Belum ada akun · connect cookie TikTok atau Instagram"}
 						</p>
 					</div>
 					<button
 						type="button"
-						onClick={() => setDialogOpen(true)}
+						onClick={() => openAdd("tiktok")}
 						className="flex items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-100 transition-colors hover:bg-indigo-700"
 					>
 						<Plus className="h-4 w-4" />
@@ -55,51 +64,101 @@ function AccountsPage() {
 					</button>
 				</div>
 
-				{user ? (
+				{accounts.length > 0 ? (
 					<div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-						<AccountCard
-							platform={platform}
-							name={user.nickname || user.uniqueId}
-							handle={`@${user.uniqueId}`}
-							avatarUrl={user.avatarUrl}
-							status="active"
-							syncedLabel="Connected"
-							bridgeLabel={label}
-							onRefresh={() => setDialogOpen(true)}
-							onSettings={onClearSession}
-							metrics={[
-								{ label: "User ID", value: user.uniqueId },
-								{
-									label: "Tool",
-									value:
-										platform === "tiktok" ? (
-											<Link
-												to="/dashboard/tiktok/repost"
-												className="text-sm font-bold text-indigo-600 no-underline hover:underline"
-											>
-												Open Remove Repost
-											</Link>
-										) : (
-											<span className="text-sm font-bold text-slate-400">
-												IG soon
-											</span>
-										),
-								},
-							]}
-						/>
+						{accounts.map((account) => {
+							const user = account.user;
+							const username =
+								user?.uniqueId ||
+								account.cookies.username ||
+								"unknown";
+							const label = bridgeLabel(account.platform, account.bridge);
+							return (
+								<AccountCard
+									key={account.id}
+									platform={account.platform}
+									name={user?.nickname || username}
+									handle={`@${username}`}
+									avatarUrl={user?.avatarUrl}
+									status="active"
+									syncedLabel={`ID ${account.id.slice(0, 12)}…`}
+									bridgeLabel={label}
+									onRefresh={() => openEdit(account.id)}
+									onSettings={() => {
+										if (
+											typeof window !== "undefined" &&
+											!window.confirm(`Hapus akun @${username}?`)
+										) {
+											return;
+										}
+										removeAccount.mutate({
+											id: account.id,
+											recordMetrics: true,
+										});
+									}}
+									metrics={[
+										{
+											label: "Platform",
+											value:
+												account.platform === "tiktok"
+													? "TikTok"
+													: "Instagram",
+										},
+										{
+											label: "Tool",
+											value: isTikTokAccount(account) ? (
+												<Link
+													to="/dashboard/tiktok/repost"
+													className="text-sm font-bold text-indigo-600 no-underline hover:underline"
+													onClick={() =>
+														setActive.mutate({
+															platform: "tiktok",
+															id: account.id,
+														})
+													}
+												>
+													Open Remove Repost
+												</Link>
+											) : (
+												<Link
+													to="/dashboard/instagram"
+													className="text-sm font-bold text-pink-600 no-underline hover:underline"
+													onClick={() =>
+														setActive.mutate({
+															platform: "instagram",
+															id: account.id,
+														})
+													}
+												>
+													Open Instagram
+												</Link>
+											),
+										},
+									]}
+								/>
+							);
+						})}
 					</div>
 				) : (
 					<Empty
 						title="No accounts connected"
-						description="Connect via Cookie TikTok or Cookie Instagram"
+						description="Connect via Cookie TikTok or Cookie Instagram — keduanya bisa disimpan bersamaan."
 						actionLabel="Add New Account"
-						onAction={() => setDialogOpen(true)}
+						onAction={() => openAdd("tiktok")}
 						className="max-w-md"
 					/>
 				)}
 			</div>
 
-			<AccountsDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+			<AccountsDialog
+				open={dialogOpen}
+				onOpenChange={(open) => {
+					setDialogOpen(open);
+					if (!open) setEditAccountId(null);
+				}}
+				editAccountId={editAccountId}
+				defaultPlatform={defaultPlatform}
+			/>
 		</>
 	);
 }

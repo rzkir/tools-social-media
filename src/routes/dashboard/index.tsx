@@ -3,7 +3,6 @@ import {
 	CheckCircle2,
 	Heart,
 	RefreshCw,
-	Star,
 	Trash2,
 	XCircle,
 } from "lucide-react";
@@ -67,9 +66,7 @@ function DashboardPage() {
 
 	const modeTotal = Math.max(
 		1,
-		metrics.byMode.repost.removed +
-			metrics.byMode.like.removed +
-			metrics.byMode.favorite.removed,
+		metrics.byMode.repost.removed + metrics.byMode.like.removed,
 	);
 
 	const recentPreview = metrics.recentItems.slice(0, 4);
@@ -262,13 +259,6 @@ function DashboardPage() {
 									tone="rose"
 									size="sm"
 								/>
-								<Progress
-									value={metrics.byMode.favorite.removed}
-									max={modeTotal}
-									label={`Favorite · ${metrics.byMode.favorite.removed} OK`}
-									tone="orange"
-									size="sm"
-								/>
 							</div>
 						</section>
 					</div>
@@ -291,7 +281,7 @@ function DashboardPage() {
 					</div>
 					{recentPreview.length === 0 ? (
 						<p className="m-0 text-sm text-slate-400">
-							Belum ada item. Jalankan hapus repost / like / favorite dulu.
+							Belum ada item. Jalankan hapus repost / like dulu.
 						</p>
 					) : (
 						<ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -340,8 +330,6 @@ function RecentItemRow({ item }: { item: MetricsItem }) {
 	const modeIcon =
 		item.mode === "like" ? (
 			<Heart className="h-3 w-3" />
-		) : item.mode === "favorite" ? (
-			<Star className="h-3 w-3" />
 		) : (
 			<RefreshCw className="h-3 w-3" />
 		);

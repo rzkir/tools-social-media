@@ -3,12 +3,14 @@ import {
 	confirmExtensionRemove,
 	type ExtensionState,
 	fetchExtensionState,
+	fetchInstagramCookies,
 	fetchTikTokCookies,
 	getLastExtensionState,
 	pingExtension,
 	startExtensionJob,
 	stopExtensionJob,
 	subscribeExtensionState,
+	type InstagramCookieAutofill,
 	type TikTokCookieAutofill,
 } from "#/lib/extension-bridge";
 import { queryKeys } from "#/lib/query-keys";
@@ -61,7 +63,7 @@ export async function startExtensionJobMutation(
 		uniqueId: string;
 		secUid?: string;
 		delayMs: number;
-		mode?: "repost" | "favorite" | "like";
+		mode?: "repost" | "like";
 	},
 ) {
 	const result = await startExtensionJob(options);
@@ -98,4 +100,15 @@ export async function fetchTikTokCookiesMutation(options?: {
 	warning?: string;
 }> {
 	return fetchTikTokCookies(options);
+}
+
+export async function fetchInstagramCookiesMutation(options?: {
+	username?: string;
+}): Promise<{
+	ok: boolean;
+	values?: InstagramCookieAutofill;
+	error?: string;
+	warning?: string;
+}> {
+	return fetchInstagramCookies(options);
 }

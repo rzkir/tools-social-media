@@ -2,7 +2,6 @@ import {
 	Heart,
 	MoreHorizontal,
 	RefreshCw,
-	Star,
 	Trash2,
 } from "lucide-react";
 import { ProgressMetric, TotalFollowersChart } from "#/components/ui/chart";
@@ -28,8 +27,7 @@ export function DashboardAside({ className, metrics }: DashboardAsideProps) {
 	const modeTotal = Math.max(
 		1,
 		(metrics?.byMode.repost.removed ?? 0) +
-			(metrics?.byMode.like.removed ?? 0) +
-			(metrics?.byMode.favorite.removed ?? 0),
+			(metrics?.byMode.like.removed ?? 0),
 	);
 
 	return (
@@ -58,14 +56,6 @@ export function DashboardAside({ className, metrics }: DashboardAsideProps) {
 							((metrics?.byMode.like.removed ?? 0) / modeTotal) * 100,
 						)}
 						icon={<Heart className="h-3.5 w-3.5" />}
-					/>
-					<ProgressMetric
-						value={String(metrics?.byMode.favorite.removed ?? 0)}
-						label="Favorite"
-						percent={Math.round(
-							((metrics?.byMode.favorite.removed ?? 0) / modeTotal) * 100,
-						)}
-						icon={<Star className="h-3.5 w-3.5" />}
 					/>
 				</div>
 

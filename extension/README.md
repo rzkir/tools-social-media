@@ -1,6 +1,6 @@
 # Chrome Extension — Remove TikTok
 
-Kontrol hapus repost / like / favorite dari **dashboard**, sementara request API jalan di tab TikTok yang sudah login.
+Kontrol hapus repost / like dari **dashboard**, sementara request API jalan di tab TikTok yang sudah login.
 
 ## Install cepat (disarankan)
 

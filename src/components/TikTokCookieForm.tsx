@@ -28,6 +28,8 @@ export type TikTokCookieValues = {
 	s_v_web_id: string;
 	username: string;
 	secUid: string;
+	/** Not a cookie — avatar hint from extension autofill */
+	avatarUrl?: string;
 };
 
 export const EMPTY_COOKIE_VALUES: TikTokCookieValues = {
@@ -38,6 +40,7 @@ export const EMPTY_COOKIE_VALUES: TikTokCookieValues = {
 	s_v_web_id: "",
 	username: "",
 	secUid: "",
+	avatarUrl: "",
 };
 
 /** Decode values that were copied URL-encoded from DevTools (e.g. ttwid with %7C). */
@@ -54,7 +57,7 @@ function decodeCookieValue(raw: string): string {
 /** Build Cookie header from separate fields (values only, without key=). */
 export function buildCookieHeader(values: TikTokCookieValues): string {
 	const pairs: Array<
-		[Exclude<keyof TikTokCookieValues, "username" | "secUid">, string]
+		[Exclude<keyof TikTokCookieValues, "username" | "secUid" | "avatarUrl">, string]
 	> = [
 		["sessionid", values.sessionid],
 		["tt_csrf_token", values.tt_csrf_token],
@@ -94,7 +97,7 @@ type TikTokCookieFormProps = {
 };
 
 const COOKIE_FIELDS: Array<{
-	key: Exclude<keyof TikTokCookieValues, "username" | "secUid">;
+	key: Exclude<keyof TikTokCookieValues, "username" | "secUid" | "avatarUrl">;
 	label: string;
 	required?: boolean;
 	description: string;
@@ -208,6 +211,7 @@ export function TikTokCookieForm({
 							s_v_web_id: result.values.s_v_web_id || values.s_v_web_id,
 							username: result.values.username || values.username,
 							secUid: result.values.secUid || values.secUid,
+							avatarUrl: result.values.avatarUrl || values.avatarUrl || "",
 						};
 						onChange(next);
 
@@ -405,6 +409,9 @@ export function TikTokCookieForm({
 									alt=""
 									referrerPolicy="no-referrer"
 									className="h-8 w-8 rounded-full object-cover"
+									onError={(e) => {
+										e.currentTarget.style.display = "none";
+									}}
 								/>
 							) : null}
 							<span>

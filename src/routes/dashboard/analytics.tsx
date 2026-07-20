@@ -4,7 +4,6 @@ import {
 	CheckCircle2,
 	Heart,
 	RefreshCw,
-	Star,
 	Trash2,
 	XCircle,
 } from "lucide-react";
@@ -52,8 +51,8 @@ function AnalyticsPage() {
 				<div>
 					<h2 className="text-xl font-bold text-slate-800">Analytics</h2>
 					<p className="mt-1 text-sm text-slate-400">
-						Statistik lokal dari localStorage — hapus repost / like / favorite &
-						connect akun.
+						Statistik lokal dari localStorage — hapus repost / like & connect
+						akun.
 					</p>
 				</div>
 				<div className="flex flex-wrap gap-2">
@@ -160,11 +159,6 @@ function AnalyticsPage() {
 							label="Like"
 							bucket={metrics.byMode.like}
 						/>
-						<ModeRow
-							icon={<Star className="h-4 w-4" />}
-							label="Favorite"
-							bucket={metrics.byMode.favorite}
-						/>
 					</ul>
 				</section>
 			</div>
@@ -175,7 +169,7 @@ function AnalyticsPage() {
 					<Empty
 						icon={Trash2}
 						title="Belum ada item terhapus"
-						description="Jalankan hapus repost, like, atau favorite — title, picture, dan description akan muncul di sini."
+						description="Jalankan hapus repost atau like — title, picture, dan description akan muncul di sini."
 						actionLabel="Buka TikTok Tool"
 						onAction={() => void navigate({ to: "/dashboard/tiktok" })}
 						className="min-h-[180px]"
@@ -236,7 +230,6 @@ function AnalyticsPage() {
 
 function modeLabel(mode: JobMode) {
 	if (mode === "like") return "Like";
-	if (mode === "favorite") return "Favorite";
 	return "Repost";
 }
 

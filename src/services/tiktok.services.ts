@@ -1,3 +1,4 @@
+import { pickTikTokAvatarUrl } from "#/lib/tiktok-avatar";
 import { signTikTokUrl, TIKTOK_USER_AGENT } from "#/lib/tiktok-sign/sign";
 import type {
 	TikTokRepostItem,
@@ -403,7 +404,7 @@ function pickUserFromRehydration(data: unknown): TikTokUser | null {
 			secUid: user.secUid,
 			uniqueId: user.uniqueId,
 			nickname: user.nickName || user.uniqueId,
-			avatarUrl: user.avatarUri?.[0],
+			avatarUrl: pickTikTokAvatarUrl(user.avatarUri),
 		};
 	}
 
@@ -414,7 +415,9 @@ function pickUserFromRehydration(data: unknown): TikTokUser | null {
 						secUid?: string;
 						uniqueId?: string;
 						nickname?: string;
-						avatarThumb?: string;
+						avatarThumb?: unknown;
+						avatarMedium?: unknown;
+						avatarLarger?: unknown;
 					};
 				};
 		  }
@@ -425,34 +428,61 @@ function pickUserFromRehydration(data: unknown): TikTokUser | null {
 			secUid: detailUser.secUid,
 			uniqueId: detailUser.uniqueId,
 			nickname: detailUser.nickname || detailUser.uniqueId,
-			avatarUrl: detailUser.avatarThumb,
+			avatarUrl: pickTikTokAvatarUrl(
+				detailUser.avatarMedium,
+				detailUser.avatarThumb,
+				detailUser.avatarLarger,
+			),
 		};
 	}
 
 	return null;
 }
 
+function pickAvatarFromHtml(html: string): string | undefined {
+	const patterns = [
+		/"avatarThumb"\s*:\s*"(https?:[^"]+)"/i,
+		/"avatarMedium"\s*:\s*"(https?:[^"]+)"/i,
+		/"avatarLarger"\s*:\s*"(https?:[^"]+)"/i,
+		/"avatarUri"\s*:\s*\[\s*"(https?:[^"]+)"/i,
+	];
+	for (const pattern of patterns) {
+		const match = html.match(pattern);
+		const url = pickTikTokAvatarUrl(match?.[1]);
+		if (url) return url;
+	}
+	// Relative avatarUri path fragment
+	const rel = html.match(
+		/"avatarUri"\s*:\s*\[\s*"((?:tos-|musically-|tiktok-obj)[^"]+)"/i,
+	);
+	return pickTikTokAvatarUrl(rel?.[1]);
+}
+
 function pickUserFromHtmlRegex(html: string): TikTokUser | null {
+	const avatarUrl = pickAvatarFromHtml(html);
+
 	// Prefer pair near uniqueId + secUid in the same object-ish window
 	const windowMatch = html.match(
 		/"uniqueId"\s*:\s*"([^"]{2,64})"[\s\S]{0,240}?"secUid"\s*:\s*"(MS4wLjABAAAA[^"]+)"/,
 	);
-	if (windowMatch) {
+	if (windowMatch?.[1] && windowMatch[2]) {
 		return {
 			uniqueId: windowMatch[1],
 			secUid: windowMatch[2],
 			nickname: windowMatch[1],
+			avatarUrl,
 		};
 	}
 
 	const alt = html.match(
 		/"secUid"\s*:\s*"(MS4wLjABAAAA[^"]+)"[\s\S]{0,240}?"uniqueId"\s*:\s*"([^"]{2,64})"/,
 	);
-	if (alt) {
+	if (alt?.[1] && alt[2]) {
 		return {
 			secUid: alt[1],
 			uniqueId: alt[2],
 			nickname: alt[2],
+			avatarUrl,
 		};
 	}
 
@@ -473,9 +503,38 @@ export async function getSelfUser(
 	if (secUid && hint) {
 		try {
 			const fromProfile = await getUserFromProfileHtml(cookieHeader, hint);
-			if (fromProfile?.secUid) return fromProfile;
+			if (fromProfile?.secUid) {
+				return {
+					...fromProfile,
+					secUid: fromProfile.secUid || secUid,
+					avatarUrl: fromProfile.avatarUrl,
+				};
+			}
 		} catch {
 			// ignore rate-limit / empty HTML
+		}
+		// Still try homepage HTML for avatar when profile page is empty/rate-limited
+		try {
+			const fromHome = await getUserFromHomeHtml(cookieHeader);
+			if (
+				fromHome &&
+				fromHome.uniqueId.toLowerCase() === hint.toLowerCase()
+			) {
+				return {
+					...fromHome,
+					secUid: fromHome.secUid || secUid,
+				};
+			}
+			if (fromHome?.avatarUrl) {
+				return {
+					secUid,
+					uniqueId: hint,
+					nickname: fromHome.nickname || hint,
+					avatarUrl: fromHome.avatarUrl,
+				};
+			}
+		} catch {
+			// ignore
 		}
 		return {
 			secUid,
@@ -607,7 +666,9 @@ async function getUserFromProfileHtml(
 								secUid?: string;
 								uniqueId?: string;
 								nickname?: string;
-								avatarThumb?: string;
+								avatarThumb?: unknown;
+								avatarMedium?: unknown;
+								avatarLarger?: unknown;
 							};
 						};
 				  }
@@ -618,7 +679,11 @@ async function getUserFromProfileHtml(
 					secUid: user.secUid,
 					uniqueId: user.uniqueId,
 					nickname: user.nickname || user.uniqueId,
-					avatarUrl: user.avatarThumb,
+					avatarUrl: pickTikTokAvatarUrl(
+						user.avatarMedium,
+						user.avatarThumb,
+						user.avatarLarger,
+					),
 				};
 			}
 		} catch {
@@ -636,6 +701,7 @@ async function getUserFromProfileHtml(
 			secUid: sec[1],
 			uniqueId,
 			nickname: uniqueId,
+			avatarUrl: pickAvatarFromHtml(html),
 		};
 	}
 
@@ -669,7 +735,9 @@ async function getUserByUniqueId(
 				secUid?: string;
 				uniqueId?: string;
 				nickname?: string;
-				avatarThumb?: string;
+				avatarThumb?: unknown;
+				avatarMedium?: unknown;
+				avatarLarger?: unknown;
 			};
 		};
 	}>(res, "/api/user/detail/");
@@ -687,7 +755,11 @@ async function getUserByUniqueId(
 		secUid: user.secUid,
 		uniqueId: user.uniqueId,
 		nickname: user.nickname || user.uniqueId,
-		avatarUrl: user.avatarThumb,
+		avatarUrl: pickTikTokAvatarUrl(
+			user.avatarMedium,
+			user.avatarThumb,
+			user.avatarLarger,
+		),
 	};
 }
 

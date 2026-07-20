@@ -1,38 +1,34 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { TikTokCookieValues } from "#/components/TikTokCookieForm";
-import { verifySessionFn } from "#/server/tiktok.functions";
+import type { InstagramCookieValues } from "#/components/InstagramCookieForm";
+import { verifyInstagramSessionFn } from "#/server/instagram.functions";
 import { recordConnectResultMutation } from "#/services/metrics.query";
 import { saveCookieSessionMutation } from "#/services/session.query";
 import type { TikTokUser } from "#/types/tiktok";
 
-export type VerifySessionInput = {
+export type VerifyInstagramSessionInput = {
 	cookies: string;
-	uniqueId?: string;
-	secUid?: string;
-	avatarHint?: string;
-	/** Current form values — updated with verified uniqueId/secUid on success */
-	cookieValues: TikTokCookieValues;
+	username?: string;
+	cookieValues: InstagramCookieValues;
 	/** Existing account id when re-verifying */
 	accountId?: string;
 };
 
-export type VerifySessionSuccess = {
+export type VerifyInstagramSessionSuccess = {
 	ok: true;
 	user: TikTokUser;
-	cookieValues: TikTokCookieValues;
+	cookieValues: InstagramCookieValues;
 	accountId: string;
 };
 
-export async function verifySessionMutation(
+export async function verifyInstagramSessionMutation(
 	queryClient: QueryClient,
-	input: VerifySessionInput,
-): Promise<VerifySessionSuccess> {
-	const result = await verifySessionFn({
+	input: VerifyInstagramSessionInput,
+): Promise<VerifyInstagramSessionSuccess> {
+	const result = await verifyInstagramSessionFn({
 		data: {
 			cookies: input.cookies,
-			uniqueId: input.uniqueId,
-			secUid: input.secUid,
-			avatarHint: input.avatarHint || input.cookieValues.avatarUrl,
+			username: input.username || input.cookieValues.username,
+			avatarHint: input.cookieValues.avatarUrl,
 		},
 	});
 
@@ -43,16 +39,16 @@ export async function verifySessionMutation(
 				: "Server error. Coba refresh halaman.";
 		await recordConnectResultMutation(queryClient, {
 			ok: false,
-			platform: "tiktok",
+			platform: "instagram",
 			error: message,
 		});
 		throw new Error(message);
 	}
 
-	const nextCookies: TikTokCookieValues = {
+	const nextCookies: InstagramCookieValues = {
 		...input.cookieValues,
 		username: result.user.uniqueId,
-		secUid: result.user.secUid,
+		ds_user_id: result.user.secUid || input.cookieValues.ds_user_id,
 	};
 
 	const saved = await saveCookieSessionMutation(
@@ -60,7 +56,7 @@ export async function verifySessionMutation(
 		nextCookies,
 		result.user,
 		{
-			platform: "tiktok",
+			platform: "instagram",
 			bridge: "cookie",
 			id: input.accountId,
 			setActive: true,
@@ -69,7 +65,7 @@ export async function verifySessionMutation(
 
 	await recordConnectResultMutation(queryClient, {
 		ok: true,
-		platform: "tiktok",
+		platform: "instagram",
 		username: result.user.uniqueId,
 	});
 

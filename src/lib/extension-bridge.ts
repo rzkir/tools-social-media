@@ -244,7 +244,7 @@ export async function startExtensionJob(options: {
 	uniqueId: string;
 	secUid?: string;
 	delayMs: number;
-	mode?: "repost" | "favorite" | "like";
+	mode?: "repost" | "like";
 }): Promise<{ ok: boolean; error?: string }> {
 	// Clear stale progress so UI never flashes a previous run
 	lastState = {
@@ -307,6 +307,7 @@ export type TikTokCookieAutofill = {
 	s_v_web_id: string;
 	username?: string;
 	secUid?: string;
+	avatarUrl?: string;
 };
 
 /** Read TikTok session cookies from the browser via the Chrome extension. */
@@ -340,6 +341,54 @@ export async function fetchTikTokCookies(options?: {
 			error:
 				res?.error ||
 				"Cookie TikTok tidak ditemukan. Login di tab tiktok.com dulu, pastikan ekstensi aktif, lalu coba lagi.",
+		};
+	}
+
+	return { ok: true, values: res.values, warning: res.warning };
+}
+
+export type InstagramCookieAutofill = {
+	sessionid: string;
+	ds_user_id: string;
+	csrftoken: string;
+	mid: string;
+	ig_did: string;
+	datr: string;
+	username?: string;
+	avatarUrl?: string;
+};
+
+/** Read Instagram session cookies from the browser via the Chrome extension. */
+export async function fetchInstagramCookies(options?: {
+	username?: string;
+}): Promise<{
+	ok: boolean;
+	values?: InstagramCookieAutofill;
+	error?: string;
+	warning?: string;
+}> {
+	const username = String(options?.username || "")
+		.replace(/^@/, "")
+		.trim();
+	const res = (await sendToExtension(
+		{
+			type: "GET_INSTAGRAM_COOKIES",
+			username: username || undefined,
+		},
+		20000,
+	)) as {
+		ok?: boolean;
+		values?: InstagramCookieAutofill;
+		error?: string;
+		warning?: string;
+	};
+
+	if (!res?.ok || !res.values?.sessionid) {
+		return {
+			ok: false,
+			error:
+				res?.error ||
+				"Cookie Instagram tidak ditemukan. Login di instagram.com dulu, pastikan ekstensi aktif, lalu coba lagi.",
 		};
 	}
 

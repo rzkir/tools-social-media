@@ -20,7 +20,7 @@ import {
 	unmarkExtensionHost,
 } from "#/lib/extension-bridge";
 
-export type ProgressJobMode = "repost" | "favorite" | "like";
+export type ProgressJobMode = "repost" | "like";
 
 export type ProgressJob = {
 	mode: ProgressJobMode;

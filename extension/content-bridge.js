@@ -150,6 +150,7 @@
 
   const METRICS_KEY = "rr_dashboard_metrics_v1";
   const SESSION_KEY = "tt_repost_cookie_session";
+  const ACCOUNTS_KEY = "rr_accounts_v2";
 
   function readLocalJson(key) {
     try {
@@ -171,26 +172,25 @@
     }
   }
 
-  function normalizeSession(raw) {
+  function normalizeAccount(raw) {
     if (!raw || typeof raw !== "object") return null;
     const cookies =
       raw.cookies && typeof raw.cookies === "object" ? raw.cookies : {};
     let user = raw.user && typeof raw.user === "object" ? raw.user : null;
-    const username = String(
-      user?.uniqueId || cookies.username || "",
-    )
+    const username = String(user?.uniqueId || cookies.username || "")
       .trim()
       .replace(/^@/, "");
     if (!username) return null;
     if (!user) {
       user = {
         uniqueId: username,
-        secUid: String(cookies.secUid || ""),
+        secUid: String(cookies.secUid || cookies.ds_user_id || ""),
         nickname: username,
         avatarUrl: undefined,
       };
     }
     return {
+      id: String(raw.id || ""),
       cookies,
       user,
       platform: raw.platform === "instagram" ? "instagram" : "tiktok",
@@ -198,15 +198,32 @@
     };
   }
 
+  function readAccounts() {
+    const store = readSessionJson(ACCOUNTS_KEY);
+    if (store && Array.isArray(store.accounts)) {
+      return store.accounts.map(normalizeAccount).filter(Boolean);
+    }
+    const legacy = normalizeAccount(readSessionJson(SESSION_KEY));
+    return legacy ? [legacy] : [];
+  }
+
   function syncPopupData() {
     try {
+      const accounts = readAccounts();
+      const tiktok =
+        accounts.find((a) => a.platform === "tiktok") || null;
+      const instagram =
+        accounts.find((a) => a.platform === "instagram") || null;
       chrome.runtime.sendMessage(
         {
           type: "SYNC_POPUP_DATA",
           data: {
             metrics: readLocalJson(METRICS_KEY),
-            // Session akun disimpan di sessionStorage (bukan localStorage)
-            session: normalizeSession(readSessionJson(SESSION_KEY)),
+            accounts,
+            // Legacy single-session fields for older popup UI
+            session: tiktok || instagram,
+            tiktokSession: tiktok,
+            instagramSession: instagram,
             syncedAt: Date.now(),
           },
         },

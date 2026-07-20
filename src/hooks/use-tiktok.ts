@@ -10,6 +10,7 @@ export function useVerifySession() {
 			uniqueId?: string;
 			secUid?: string;
 			cookieValues: TikTokCookieValues;
+			accountId?: string;
 		}) => verifySessionMutation(queryClient, input),
 	});
 }

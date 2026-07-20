@@ -38,12 +38,6 @@ function headerCopyFromPath(pathname: string): {
 			subtitle: "Hapus like via Chrome extension",
 		};
 	}
-	if (pathname.startsWith("/dashboard/tiktok/favorite")) {
-		return {
-			title: "Favorite",
-			subtitle: "Hapus favorite via Chrome extension",
-		};
-	}
 	if (pathname.startsWith("/dashboard/tiktok")) {
 		return {
 			title: "TikTok Tool",

@@ -1,5 +1,5 @@
 (() => {
-  const CS_VERSION = 16;
+  const CS_VERSION = 25;
 
   let stopped = false;
   let panel = null;
@@ -36,16 +36,9 @@
       listing: "like",
       empty: "Tidak ada like (Disukai).",
     },
-    favorite: {
-      title: "Remove Favorite",
-      noun: "favorite",
-      listing: "favorite",
-      empty: "Tidak ada favorite.",
-    },
   };
 
   function normalizeMode(mode) {
-    if (mode === "favorite") return "favorite";
     if (mode === "like" || mode === "liked") return "like";
     return "repost";
   }
@@ -202,11 +195,9 @@
 
   async function listPageOnce(secUid, cursor) {
     const path =
-      activeMode === "favorite"
-        ? "/api/user/collect/item_list/"
-        : activeMode === "like"
-          ? "/api/favorite/item_list/"
-          : "/api/repost/item_list/";
+      activeMode === "like"
+        ? "/api/favorite/item_list/"
+        : "/api/repost/item_list/";
 
     const params = new URLSearchParams({
       aid: "1988",
@@ -235,9 +226,14 @@
       throw new Error("status_code " + code + ": " + msg);
     }
 
-    const rawItems = json.itemList || json.item_list || [];
+    const rawItems =
+      json.itemList ||
+      json.item_list ||
+      json.aweme_list ||
+      json.awemeList ||
+      [];
     const items = rawItems
-      .filter((e) => e && (e.id != null || e.aweme_id != null))
+      .filter((e) => e && (e.id != null || e.aweme_id != null || e.awemeId != null))
       .map((e) => {
         const video = e.video || {};
         const cover =
@@ -250,8 +246,14 @@
           null;
         const authorId =
           e.author?.uniqueId || e.author?.unique_id || "unknown";
+        const itemId =
+          e.id != null
+            ? e.id
+            : e.aweme_id != null
+              ? e.aweme_id
+              : e.awemeId;
         return {
-          id: String(e.id != null ? e.id : e.aweme_id),
+          id: String(itemId),
           author: "@" + authorId,
           nickname: e.author?.nickname || e.author?.nickName || authorId,
           desc: String(e.desc || e.title || "").trim(),
@@ -400,37 +402,13 @@
     }
   }
 
-  async function removeFavorite(itemId) {
-    const res = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        { type: "UNCOLLECT", itemId: String(itemId) },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            resolve({
-              ok: false,
-              error: chrome.runtime.lastError.message || "extension error",
-            });
-            return;
-          }
-          resolve(response || { ok: false, error: "no response" });
-        },
-      );
-    });
-    if (!res?.ok) {
-      throw new Error(res?.error || "gagal hapus favorite " + itemId);
-    }
-  }
 
-  async function removeOne(itemId) {
-    if (activeMode === "like") return removeLike(itemId);
-    if (activeMode === "favorite") return removeFavorite(itemId);
-    return removeRepost(itemId);
+  async function removeOne(item) {
+    if (activeMode === "like") return removeLike(item.id);
+    return removeRepost(item.id);
   }
 
   function profileUrl(uniqueId) {
-    if (activeMode === "favorite") {
-      return "https://www.tiktok.com/@" + uniqueId + "?lang=en";
-    }
     return "https://www.tiktok.com/@" + uniqueId;
   }
 
@@ -447,9 +425,7 @@
       const onProfile = pathname.includes(path.toLowerCase());
       const onBadRoute =
         /\/foryou/i.test(pathname) ||
-        /\/@[^/]+\/liked/i.test(pathname) ||
-        (activeMode === "favorite" &&
-          /\/@[^/]+\/(repost|reposting|liked)/i.test(pathname));
+        /\/@[^/]+\/liked/i.test(pathname);
       if (!onProfile || onBadRoute) {
         setStatus("Membuka profil @" + uniqueId + "…");
         report({ status: "navigating" });
@@ -480,7 +456,6 @@
       closePanel();
       return;
     }
-
     const noun = labels().listing;
     const all = [];
     const seen = new Set();
@@ -614,7 +589,7 @@
         },
       });
       try {
-        await removeOne(item.id);
+        await removeOne(item);
         ok++;
         setStatus(
           "Hapus " +
@@ -681,6 +656,41 @@
   }
 
   function readLoggedInUserFromPage() {
+    function pickAvatar(user) {
+      if (!user || typeof user !== "object") return "";
+      const candidates = [
+        user.avatarMedium,
+        user.avatarThumb,
+        user.avatarLarger,
+        Array.isArray(user.avatarUri) ? user.avatarUri[0] : "",
+      ];
+      for (const raw of candidates) {
+        if (!raw) continue;
+        if (
+          typeof raw === "object" &&
+          Array.isArray(raw.url_list) &&
+          raw.url_list[0]
+        ) {
+          const u = String(raw.url_list[0]).trim();
+          if (u) return u.startsWith("//") ? `https:${u}` : u;
+          continue;
+        }
+        if (typeof raw !== "string") continue;
+        let u = raw.trim();
+        if (!u) continue;
+        if (u.startsWith("//")) u = `https:${u}`;
+        if (/^https?:\/\//i.test(u)) return u;
+        const path = u.replace(/^\//, "");
+        if (
+          /^(tos-|musically-|tiktok-obj)/i.test(path) ||
+          /~c5_|\.jpe?g|\.webp/i.test(path)
+        ) {
+          return `https://p16-sign.tiktokcdn-us.com/${path}`;
+        }
+      }
+      return "";
+    }
+
     function pick(scope) {
       if (!scope || typeof scope !== "object") return null;
       const ctxUser = scope["webapp.app-context"]?.user;
@@ -689,13 +699,20 @@
           ctxUser.uniqueId || ctxUser.unique_id || "",
         ).trim();
         const secUid = String(ctxUser.secUid || ctxUser.sec_uid || "").trim();
-        if (username) return { username, secUid };
+        if (username) {
+          return {
+            username,
+            secUid,
+            avatarUrl: pickAvatar(ctxUser),
+          };
+        }
       }
       const detailUser = scope["webapp.user-detail"]?.userInfo?.user;
       if (detailUser?.uniqueId) {
         return {
           username: String(detailUser.uniqueId),
           secUid: String(detailUser.secUid || ""),
+          avatarUrl: pickAvatar(detailUser),
         };
       }
       return null;
@@ -758,7 +775,7 @@
       sendResponse({
         ok: true,
         version: CS_VERSION,
-        modes: ["repost", "like", "favorite"],
+        modes: ["repost", "like"],
         mode: activeMode,
       });
       return true;
@@ -808,9 +825,32 @@
                 const ctx = scope?.["webapp.app-context"]?.user;
                 const u = detail || ctx;
                 if (u?.uniqueId || u?.secUid) {
+                  const avatarCandidates = [
+                    u.avatarMedium,
+                    u.avatarThumb,
+                    u.avatarLarger,
+                    Array.isArray(u.avatarUri) ? u.avatarUri[0] : "",
+                  ];
+                  let avatarUrl = user?.avatarUrl || "";
+                  for (const raw of avatarCandidates) {
+                    if (typeof raw === "string" && /^https?:\/\//i.test(raw)) {
+                      avatarUrl = raw;
+                      break;
+                    }
+                    if (
+                      typeof raw === "object" &&
+                      raw &&
+                      Array.isArray(raw.url_list) &&
+                      raw.url_list[0]
+                    ) {
+                      avatarUrl = String(raw.url_list[0]);
+                      break;
+                    }
+                  }
                   finish({
                     username: String(u.uniqueId || username),
                     secUid: String(u.secUid || ""),
+                    avatarUrl,
                   });
                   return;
                 }

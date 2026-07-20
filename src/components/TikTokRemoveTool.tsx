@@ -20,10 +20,10 @@ import {
 	downloadExtensionZip,
 	EXTENSION_INSTALL_HINT,
 } from "#/lib/extension-install";
-import { hasSavedAccount } from "#/lib/session-store";
+import { hasSavedAccount, isTikTokAccount } from "#/lib/session-store";
 import type { TikTokUser } from "#/types/tiktok";
 
-export type RemoveToolMode = "repost" | "favorite" | "like";
+export type RemoveToolMode = "repost" | "like";
 
 type SpeedMode = "fast" | "normal" | "safe";
 
@@ -57,18 +57,6 @@ const COPY: Record<
 			"Siap. Klik Start untuk memuat daftar, lalu atur jumlah yang dihapus.",
 		listingWord: "repost",
 	},
-	favorite: {
-		eyebrow: "Remove favorite",
-		title: "Hapus Favorite",
-		readyHint:
-			"Akun tersimpan — tinggal Start. Hapus favorite di tab TikTok yang sudah login.",
-		setupHint:
-			"Hubungkan akun sekali, lalu Start dari sini lewat ekstensi Chrome.",
-		startLabel: "Start Hapus Favorite",
-		idleHint:
-			"Siap. Klik Start untuk memuat daftar, lalu atur jumlah yang dihapus.",
-		listingWord: "favorite",
-	},
 	like: {
 		eyebrow: "Remove likes",
 		title: "Hapus Disukai",
@@ -88,7 +76,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	const minimizeCtx = useMinimizeOptional();
 	const notify = useNotificationOptional();
 	const statusAlert = useAlertStatus();
-	const { data: session, isLoading: sessionLoading } = useCookieSession();
+	const { data: session, isLoading: sessionLoading } = useCookieSession("tiktok");
 	const {
 		data: queryExtOk = false,
 		isFetching: extFetching,
@@ -115,7 +103,7 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 
 	useEffect(() => {
 		if (sessionLoading) return;
-		if (session) {
+		if (session && isTikTokAccount(session)) {
 			setCookieValues(session.cookies);
 			setUser(session.user);
 			setEditAccount(!hasSavedAccount(session));
@@ -131,7 +119,16 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 	) => {
 		setCookieValues(nextCookies);
 		if (nextUser) setUser(nextUser);
-		saveSession.mutate({ cookies: nextCookies, user: nextUser });
+		saveSession.mutate({
+			cookies: nextCookies,
+			user: nextUser,
+			meta: {
+				platform: "tiktok",
+				bridge: "cookie",
+				id: session && isTikTokAccount(session) ? session.id : undefined,
+				setActive: true,
+			},
+		});
 	};
 
 	const username = cookieValues.username || user?.uniqueId || "";

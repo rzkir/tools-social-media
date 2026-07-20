@@ -2,6 +2,7 @@ import { Clock, RefreshCw, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 import { Avatar } from "#/components/ui/avatar";
 import { Badge } from "#/components/ui/badge";
+import { tiktokAvatarFallbackUrl } from "#/lib/tiktok-avatar";
 import { cn } from "#/lib/utils";
 
 export type AccountPlatform = "facebook" | "instagram" | "twitter" | "tiktok";
@@ -39,7 +40,7 @@ export function Card({
 	return (
 		<article
 			className={cn(
-				"relative flex flex-col overflow-hidden rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm",
+				"relative flex flex-col overflow-hidden rounded-4xl border border-slate-100 bg-white p-6 shadow-sm",
 				className,
 			)}
 		>
@@ -51,9 +52,11 @@ export function Card({
 export function PlatformMark({
 	platform,
 	className,
+	size = "md",
 }: {
 	platform: AccountPlatform;
 	className?: string;
+	size?: "sm" | "md";
 }) {
 	const styles = {
 		facebook: "bg-blue-50 text-[#1877F2]",
@@ -69,10 +72,16 @@ export function PlatformMark({
 		tiktok: "TT",
 	} as const;
 
+	const sizes = {
+		sm: "h-6 w-6 rounded-lg text-[9px]",
+		md: "h-12 w-12 rounded-2xl text-sm",
+	} as const;
+
 	return (
 		<div
 			className={cn(
-				"flex h-12 w-12 items-center justify-center rounded-2xl text-sm font-extrabold",
+				"flex items-center justify-center font-extrabold",
+				sizes[size],
 				styles[platform],
 				className,
 			)}
@@ -124,10 +133,20 @@ export function AccountCard({
 			<div className="mb-6 flex items-center justify-between gap-3">
 				<div className="flex min-w-0 items-center gap-3">
 					<div className="relative shrink-0">
-						<Avatar src={avatarUrl} fallback={name || handle} alt={name} />
+						<Avatar
+							src={avatarUrl}
+							fallbackSrc={
+								platform === "tiktok"
+									? tiktokAvatarFallbackUrl(handle.replace(/^@/, ""))
+									: undefined
+							}
+							fallback={name || handle}
+							alt={name}
+						/>
 						<PlatformMark
 							platform={platform}
-							className="absolute -right-1 -bottom-1 h-6 w-6 rounded-lg text-[9px] ring-2 ring-white"
+							size="sm"
+							className="absolute -right-1 -bottom-1 z-2 ring-2 ring-white"
 						/>
 					</div>
 					<div className="min-w-0">

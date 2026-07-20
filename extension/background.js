@@ -1,5 +1,9 @@
-    const CS_VERSION = 16;
+const CS_VERSION = 25;
 
+/**
+ * Unlike — must be fully self-contained (chrome.scripting.executeScript
+ * only serializes this function body; no outer helpers).
+ */
 async function undiggInMainWorld(awemeId) {
   const id = String(awemeId);
   let ctx = null;
@@ -14,10 +18,22 @@ async function undiggInMainWorld(awemeId) {
     ctx = null;
   }
 
+  function cookieValue(name) {
+    const m = document.cookie.match(
+      new RegExp(
+        "(?:^|; )" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=([^;]*)",
+      ),
+    );
+    if (!m?.[1]) return "";
+    try {
+      return decodeURIComponent(m[1]);
+    } catch {
+      return m[1];
+    }
+  }
+
   let csrf =
-    (ctx && ctx.csrfToken) ||
-    (document.cookie.match(/(?:^|; )tt_csrf_token=([^;]*)/) || [])[1] ||
-    "";
+    (ctx && ctx.csrfToken) || cookieValue("tt_csrf_token") || "";
   try {
     csrf = decodeURIComponent(csrf);
   } catch {
@@ -30,54 +46,97 @@ async function undiggInMainWorld(awemeId) {
     };
   }
 
-  const userAgent =
-    (ctx && ctx.userAgent) ||
-    (typeof navigator !== "undefined" ? navigator.userAgent : "") ||
-    "";
-  const odinId = (ctx && ctx.odinId) || "";
+  const nav = typeof navigator !== "undefined" ? navigator : null;
+  const userAgent = String(
+    (ctx && ctx.userAgent) || (nav && nav.userAgent) || "",
+  ).trim();
+  const browserLanguage = String(
+    (ctx && (ctx.language || ctx.appLanguage)) ||
+      (nav && (nav.language || (nav.languages && nav.languages[0]))) ||
+      "",
+  ).trim();
+  const langShort = (
+    browserLanguage.split("-")[0] ||
+    browserLanguage ||
+    "en"
+  ).trim();
+  const region = String(
+    (ctx && (ctx.region || ctx.storeRegion || ctx.priorityRegion)) || "",
+  )
+    .trim()
+    .toUpperCase();
+  const priorityRegion = String(
+    (ctx && (ctx.priorityRegion || ctx.region)) || region || "",
+  )
+    .trim()
+    .toUpperCase();
+  const platform = String((nav && nav.platform) || "").trim();
+  const platformLower = platform.toLowerCase();
+  let os = "windows";
+  if (/mac/i.test(platformLower) || /mac/i.test(userAgent)) os = "mac";
+  else if (/linux/i.test(platformLower) || /linux/i.test(userAgent)) os = "linux";
+  else if (/win/i.test(platformLower) || /windows/i.test(userAgent)) os = "windows";
+
+  const deviceId = String(
+    (ctx && (ctx.wid || ctx.deviceId)) ||
+      cookieValue("tt_webid_v2") ||
+      cookieValue("tt_webid") ||
+      cookieValue("s_v_web_id") ||
+      "",
+  ).trim();
+  const odinId = String((ctx && ctx.odinId) || "").trim();
+  const msToken = cookieValue("msToken");
+  const verifyFp = cookieValue("s_v_web_id") || cookieValue("verifyFp") || "";
   const screenW =
-    typeof screen !== "undefined" && screen.width ? screen.width : 1536;
+    typeof screen !== "undefined" && screen.width ? screen.width : 0;
   const screenH =
-    typeof screen !== "undefined" && screen.height ? screen.height : 864;
-  let tz = "UTC";
+    typeof screen !== "undefined" && screen.height ? screen.height : 0;
+  let tz = "";
   try {
-    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
   } catch {
-    // ignore
+    tz = "";
   }
 
-  const params = new URLSearchParams({
+  const paramsObj = {
     aid: "1988",
-    app_language: "en",
+    app_language: langShort,
     app_name: "tiktok_web",
     aweme_id: id,
-    browser_language: "en",
+    browser_language: browserLanguage || langShort,
     browser_name: "Mozilla",
-    browser_online: "true",
-    browser_platform: "Win32",
+    browser_online: nav && nav.onLine === false ? "false" : "true",
+    browser_platform: platform || "Win32",
     browser_version: userAgent,
     channel: "tiktok_web",
     cookie_enabled: "true",
     data_collection_enabled: "true",
-    device_id: "7469968254971495954",
     device_platform: "web_pc",
     focus_state: "true",
     from_page: "video",
-    history_len: "4",
+    history_len: String(
+      typeof history !== "undefined" && history.length ? history.length : 1,
+    ),
     is_fullscreen: "false",
     is_page_visible: "true",
-    odinId: String(odinId),
-    os: "windows",
-    priority_region: "",
-    referer: "",
-    region: "US",
-    screen_height: String(screenH),
-    screen_width: String(screenW),
+    language: langShort,
+    os,
+    referer: typeof document !== "undefined" ? document.referrer || "" : "",
+    screen_height: String(screenH || ""),
+    screen_width: String(screenW || ""),
     type: "0",
     tz_name: tz,
     user_is_login: "true",
-    webcast_language: "en",
-  });
+    webcast_language: langShort,
+  };
+  if (deviceId) paramsObj.device_id = deviceId;
+  if (odinId) paramsObj.odinId = odinId;
+  if (region) paramsObj.region = region;
+  if (priorityRegion) paramsObj.priority_region = priorityRegion;
+  if (msToken) paramsObj.msToken = msToken;
+  if (verifyFp) paramsObj.verifyFp = verifyFp;
+
+  const params = new URLSearchParams(paramsObj);
 
   try {
     const res = await fetch(
@@ -126,152 +185,6 @@ async function undiggInMainWorld(awemeId) {
   }
 }
 
-async function uncollectInMainWorld(awemeId) {
-  const id = String(awemeId);
-  let ctx = null;
-  try {
-    const u1 = window.__$UNIVERSAL_DATA$__;
-    const u2 = window.__UNIVERSAL_DATA_FOR_REHYDRATION__;
-    ctx =
-      u1?.__DEFAULT_SCOPE__?.["webapp.app-context"] ||
-      u2?.__DEFAULT_SCOPE__?.["webapp.app-context"] ||
-      null;
-  } catch {
-    ctx = null;
-  }
-
-  let csrf =
-    (ctx && ctx.csrfToken) ||
-    (document.cookie.match(/(?:^|; )tt_csrf_token=([^;]*)/) || [])[1] ||
-    "";
-  try {
-    csrf = decodeURIComponent(csrf);
-  } catch {
-    // keep raw
-  }
-  if (!csrf) {
-    return {
-      ok: false,
-      error: "csrfToken tidak ada — refresh tiktok.com & login ulang",
-    };
-  }
-
-  const userAgent =
-    (ctx && ctx.userAgent) ||
-    (typeof navigator !== "undefined" ? navigator.userAgent : "") ||
-    "";
-  const odinId = (ctx && ctx.odinId) || "";
-  const screenW =
-    typeof screen !== "undefined" && screen.width ? screen.width : 1536;
-  const screenH =
-    typeof screen !== "undefined" && screen.height ? screen.height : 864;
-  let tz = "UTC";
-  try {
-    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    // ignore
-  }
-
-  const base = {
-    aid: "1988",
-    app_language: "en",
-    app_name: "tiktok_web",
-    browser_language: "en",
-    browser_name: "Mozilla",
-    browser_online: "true",
-    browser_platform: "Win32",
-    browser_version: userAgent,
-    channel: "tiktok_web",
-    cookie_enabled: "true",
-    data_collection_enabled: "true",
-    device_id: "7469968254971495954",
-    device_platform: "web_pc",
-    focus_state: "true",
-    from_page: "user",
-    history_len: "4",
-    is_fullscreen: "false",
-    is_page_visible: "true",
-    odinId: String(odinId),
-    os: "windows",
-    priority_region: "",
-    referer: "",
-    region: "US",
-    screen_height: String(screenH),
-    screen_width: String(screenW),
-    tz_name: tz,
-    user_is_login: "true",
-    webcast_language: "en",
-  };
-
-  // Mirrors working /api/commit/item/digg/ unlike: aweme_id + type=0 + csrf
-  const attempts = [
-    {
-      path: "/api/commit/item/collect/",
-      extra: { aweme_id: id, type: "0" },
-    },
-    {
-      path: "/api/commit/item/collect/",
-      extra: { itemId: id, type: "0" },
-    },
-    {
-      path: "/api/commit/item/collect/",
-      extra: { itemId: id, actionType: "0" },
-    },
-    {
-      path: "/api/commit/item/collect/",
-      extra: { aweme_id: id, actionType: "0" },
-    },
-    {
-      path: "/api/commit/item/collect/",
-      extra: { item_id: id, action_type: "0" },
-    },
-  ];
-
-  let lastErr = "gagal uncollect " + id;
-  for (const attempt of attempts) {
-    const params = new URLSearchParams({ ...base, ...attempt.extra });
-    const url =
-      "https://www.tiktok.com" + attempt.path + "?" + params.toString();
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          accept: "*/*",
-          "content-type": "application/x-www-form-urlencoded",
-          "tt-csrf-token": csrf,
-        },
-        body: "",
-        credentials: "include",
-      });
-      const raw = await res.text();
-      if (!raw || !raw.trim()) {
-        if (res.ok || res.status === 200) return { ok: true };
-        lastErr = "empty HTTP " + res.status;
-        continue;
-      }
-      if (res.status === 429 || /ratelimit/i.test(raw)) {
-        lastErr =
-          "TikTok rate-limit. Tunggu 1–2 menit, pakai kecepatan Aman, lalu coba lagi.";
-        continue;
-      }
-      let json;
-      try {
-        json = JSON.parse(raw);
-      } catch {
-        lastErr = "Respons bukan JSON: " + raw.slice(0, 60);
-        continue;
-      }
-      const code = json.status_code ?? json.statusCode;
-      if (code === 0 || code === "0") return { ok: true };
-      lastErr =
-        json.status_msg || json.statusMsg || "status_code " + String(code);
-    } catch (e) {
-      lastErr = e && e.message ? e.message : String(e);
-    }
-  }
-  return { ok: false, error: lastErr };
-}
-
 const state = {
   running: false,
   status: "idle",
@@ -311,23 +224,79 @@ async function findTikTokTab(uniqueId) {
   return null;
 }
 
-/** Extract logged-in uniqueId/secUid from TikTok rehydration scope. */
+/** Normalize TikTok avatar field (string path, full URL, or {url_list}). */
+function pickAvatarFromUser(user) {
+  if (!user || typeof user !== "object") return "";
+  const candidates = [
+    user.avatarMedium,
+    user.avatarThumb,
+    user.avatarLarger,
+    Array.isArray(user.avatarUri) ? user.avatarUri[0] : "",
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    if (typeof raw === "object" && Array.isArray(raw.url_list) && raw.url_list[0]) {
+      const u = String(raw.url_list[0]).trim();
+      if (u) return u.startsWith("//") ? `https:${u}` : u;
+      continue;
+    }
+    if (typeof raw !== "string") continue;
+    let u = raw.trim().replace(/\\u002[fF]/g, "/").replace(/\\\//g, "/");
+    if (!u) continue;
+    if (u.startsWith("//")) u = `https:${u}`;
+    if (/^https?:\/\//i.test(u)) return u;
+    const path = u.replace(/^\//, "");
+    if (/^(tos-|musically-|tiktok-obj)/i.test(path) || /~c5_|\.jpe?g|\.webp/i.test(path)) {
+      return `https://p16-sign.tiktokcdn-us.com/${path}`;
+    }
+  }
+  return "";
+}
+
+/** Extract logged-in uniqueId/secUid/avatar from TikTok rehydration scope. */
 function pickUserFromScope(scope) {
   if (!scope || typeof scope !== "object") return null;
   const ctxUser = scope["webapp.app-context"]?.user;
   if (ctxUser && typeof ctxUser === "object") {
     const username = String(ctxUser.uniqueId || ctxUser.unique_id || "").trim();
     const secUid = String(ctxUser.secUid || ctxUser.sec_uid || "").trim();
-    if (username) return { username, secUid };
+    if (username) {
+      return {
+        username,
+        secUid,
+        avatarUrl: pickAvatarFromUser(ctxUser),
+      };
+    }
   }
   const detailUser = scope["webapp.user-detail"]?.userInfo?.user;
   if (detailUser?.uniqueId) {
     return {
       username: String(detailUser.uniqueId),
       secUid: String(detailUser.secUid || ""),
+      avatarUrl: pickAvatarFromUser(detailUser),
     };
   }
   return null;
+}
+
+function pickAvatarFromHtml(html) {
+  if (!html || typeof html !== "string") return "";
+  const patterns = [
+    /"avatarThumb"\s*:\s*"(https?:[^"]+)"/i,
+    /"avatarMedium"\s*:\s*"(https?:[^"]+)"/i,
+    /"avatarUri"\s*:\s*\[\s*"(https?:[^"]+)"/i,
+  ];
+  for (const pattern of patterns) {
+    const m = html.match(pattern);
+    if (m?.[1]) return m[1].replace(/\\u002[fF]/g, "/").replace(/\\\//g, "/");
+  }
+  const rel = html.match(
+    /"avatarUri"\s*:\s*\[\s*"((?:tos-|musically-|tiktok-obj)[^"]+)"/i,
+  );
+  if (rel?.[1]) {
+    return `https://p16-sign.tiktokcdn-us.com/${rel[1].replace(/^\//, "")}`;
+  }
+  return "";
 }
 
 function pickUserFromHtml(html) {
@@ -344,17 +313,18 @@ function pickUserFromHtml(html) {
       // continue
     }
   }
+  const avatarUrl = pickAvatarFromHtml(html);
   const windowMatch = html.match(
     /"uniqueId"\s*:\s*"([^"]{2,64})"[\s\S]{0,240}?"secUid"\s*:\s*"(MS4wLjABAAAA[^"]+)"/,
   );
   if (windowMatch) {
-    return { username: windowMatch[1], secUid: windowMatch[2] };
+    return { username: windowMatch[1], secUid: windowMatch[2], avatarUrl };
   }
   const alt = html.match(
     /"secUid"\s*:\s*"(MS4wLjABAAAA[^"]+)"[\s\S]{0,240}?"uniqueId"\s*:\s*"([^"]{2,64})"/,
   );
   if (alt) {
-    return { username: alt[2], secUid: alt[1] };
+    return { username: alt[2], secUid: alt[1], avatarUrl };
   }
   return null;
 }
@@ -538,6 +508,41 @@ async function resolveUserInTikTokTab(tabId, uniqueIdHint) {
       world: "MAIN",
       args: [String(uniqueIdHint || "").replace(/^@/, "").trim()],
       func: async (hint) => {
+        function pickAvatar(user) {
+          if (!user || typeof user !== "object") return "";
+          const candidates = [
+            user.avatarMedium,
+            user.avatarThumb,
+            user.avatarLarger,
+            Array.isArray(user.avatarUri) ? user.avatarUri[0] : "",
+          ];
+          for (const raw of candidates) {
+            if (!raw) continue;
+            if (
+              typeof raw === "object" &&
+              Array.isArray(raw.url_list) &&
+              raw.url_list[0]
+            ) {
+              const u = String(raw.url_list[0]).trim();
+              if (u) return u.startsWith("//") ? `https:${u}` : u;
+              continue;
+            }
+            if (typeof raw !== "string") continue;
+            let u = raw.trim();
+            if (!u) continue;
+            if (u.startsWith("//")) u = `https:${u}`;
+            if (/^https?:\/\//i.test(u)) return u;
+            const path = u.replace(/^\//, "");
+            if (
+              /^(tos-|musically-|tiktok-obj)/i.test(path) ||
+              /~c5_|\.jpe?g|\.webp/i.test(path)
+            ) {
+              return `https://p16-sign.tiktokcdn-us.com/${path}`;
+            }
+          }
+          return "";
+        }
+
         function pick(scope) {
           if (!scope || typeof scope !== "object") return null;
           const ctxUser = scope["webapp.app-context"]?.user;
@@ -548,13 +553,20 @@ async function resolveUserInTikTokTab(tabId, uniqueIdHint) {
             const secUid = String(
               ctxUser.secUid || ctxUser.sec_uid || "",
             ).trim();
-            if (username) return { username, secUid };
+            if (username) {
+              return {
+                username,
+                secUid,
+                avatarUrl: pickAvatar(ctxUser),
+              };
+            }
           }
           const detailUser = scope["webapp.user-detail"]?.userInfo?.user;
           if (detailUser?.uniqueId || detailUser?.secUid) {
             return {
               username: String(detailUser.uniqueId || ""),
               secUid: String(detailUser.secUid || ""),
+              avatarUrl: pickAvatar(detailUser),
             };
           }
           return null;
@@ -629,6 +641,7 @@ async function resolveUserInTikTokTab(tabId, uniqueIdHint) {
                 best = {
                   username: fromDom.username || best?.username || "",
                   secUid: fromDom.secUid || best?.secUid || "",
+                  avatarUrl: fromDom.avatarUrl || best?.avatarUrl || "",
                 };
               }
             }
@@ -639,15 +652,22 @@ async function resolveUserInTikTokTab(tabId, uniqueIdHint) {
 
         if (!best?.username) {
           const nav = fromNav();
-          if (nav) best = { ...(best || {}), ...nav, secUid: best?.secUid || "" };
+          if (nav) {
+            best = {
+              ...(best || {}),
+              ...nav,
+              secUid: best?.secUid || "",
+              avatarUrl: best?.avatarUrl || "",
+            };
+          }
         }
 
         const username = String(hint || best?.username || "")
           .replace(/^@/, "")
           .trim();
 
-        // Fetch own profile HTML in this tab's session → reliable secUid
-        if (username && !best?.secUid) {
+        // Fetch own profile HTML in this tab's session → reliable secUid + avatar
+        if (username && (!best?.secUid || !best?.avatarUrl)) {
           try {
             const res = await fetch(
               `https://www.tiktok.com/@${encodeURIComponent(username)}?lang=en`,
@@ -663,10 +683,11 @@ async function resolveUserInTikTokTab(tabId, uniqueIdHint) {
             if (res.ok) {
               const html = await res.text();
               const parsed = fromHtml(html);
-              if (parsed?.secUid || parsed?.username) {
+              if (parsed?.secUid || parsed?.username || parsed?.avatarUrl) {
                 best = {
                   username: parsed.username || username,
-                  secUid: parsed.secUid || "",
+                  secUid: parsed.secUid || best?.secUid || "",
+                  avatarUrl: parsed.avatarUrl || best?.avatarUrl || "",
                 };
               }
             }
@@ -676,7 +697,11 @@ async function resolveUserInTikTokTab(tabId, uniqueIdHint) {
         }
 
         if (!best?.username && username) {
-          best = { username, secUid: best?.secUid || "" };
+          best = {
+            username,
+            secUid: best?.secUid || "",
+            avatarUrl: best?.avatarUrl || "",
+          };
         }
 
         return best?.username ? best : null;
@@ -726,14 +751,10 @@ function profileUrlForMode(uniqueId, mode) {
   if (!uniqueId) return "https://www.tiktok.com";
   // Like + repost: open profile root. `/liked` often redirects to /foryou
   // when the Liked tab is private — listing still uses the API + secUid.
-  if (mode === "favorite") {
-    return `https://www.tiktok.com/@${uniqueId}?lang=en`;
-  }
   return `https://www.tiktok.com/@${uniqueId}`;
 }
 
 function normalizeMode(mode) {
-  if (mode === "favorite") return "favorite";
   if (mode === "like" || mode === "liked") return "like";
   return "repost";
 }
@@ -794,15 +815,27 @@ function sendPing(tabId) {
 }
 
 function isCurrentContentScript(res) {
-  return Boolean(res?.ok && res.version === CS_VERSION);
+  return Boolean(res?.ok && Number(res.version) === CS_VERSION);
 }
 
 async function ensureTikTokContentScript(tabId) {
-  for (let i = 0; i < 10; i++) {
+  let sawStale = false;
+  for (let i = 0; i < 16; i++) {
     const res = await sendPing(tabId);
     if (isCurrentContentScript(res)) return { ok: true };
     if (res?.ok && !isCurrentContentScript(res)) {
-      return { ok: false, stale: true };
+      sawStale = true;
+      // Stale CS from before extension reload — force reinject, don't bail
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["content-tiktok.js"],
+        });
+      } catch {
+        // page may still be loading
+      }
+      await sleep(700);
+      continue;
     }
     try {
       await chrome.scripting.executeScript({
@@ -812,15 +845,16 @@ async function ensureTikTokContentScript(tabId) {
     } catch {
       // page may still be loading / restricted
     }
-    await sleep(500);
+    await sleep(i < 4 ? 400 : 800);
   }
-  return { ok: false };
+  return { ok: false, stale: sawStale };
 }
 
 async function reloadTabForFreshScript(tabId) {
   await chrome.tabs.reload(tabId);
   await waitTabComplete(tabId);
-  await sleep(800);
+  // document_idle CS injects after "complete" — give it time
+  await sleep(1500);
 }
 
 async function startOnTikTokTab(tabId, payload) {
@@ -832,12 +866,18 @@ async function startOnTikTokTab(tabId, payload) {
 
   // Reload in background to flush stale CS — does not steal dashboard focus
   await reloadTabForFreshScript(tabId);
-  await sleep(600);
 
   let ready = await ensureTikTokContentScript(tabId);
   if (!ready.ok) {
+    // One more full reload before giving up
+    await reloadTabForFreshScript(tabId);
+    ready = await ensureTikTokContentScript(tabId);
+  }
+  if (!ready.ok) {
     throw new Error(
-      "Tab TikTok belum siap. Refresh tab tiktok.com, pastikan login, lalu Start lagi.",
+      ready.stale
+        ? "Ekstensi perlu di-reload. Buka chrome://extensions → Reload Remove TikTok, refresh tab TikTok, lalu Start lagi."
+        : "Tab TikTok belum siap. Buka/refresh tab tiktok.com (login), reload ekstensi di chrome://extensions, lalu Start lagi.",
     );
   }
 
@@ -882,6 +922,100 @@ async function handleMessage(msg, sender) {
     return { ok: true, data: rrPopupData || null, state };
   }
 
+  if (msg?.type === "GET_INSTAGRAM_COOKIES") {
+    try {
+      const list = await chrome.cookies.getAll({ domain: "instagram.com" });
+      const jar = {};
+      for (const c of list) {
+        if (!c?.name) continue;
+        const prev = jar[c.name];
+        if (!prev || String(c.value || "").length > String(prev).length) {
+          jar[c.name] = c.value || "";
+        }
+      }
+      const sessionid = jar.sessionid || "";
+      const ds_user_id = jar.ds_user_id || "";
+      const csrftoken = jar.csrftoken || "";
+      if (!sessionid) {
+        return {
+          ok: false,
+          error:
+            "Cookie sessionid tidak ditemukan. Login dulu di tab instagram.com, lalu coba lagi.",
+          cookies: jar,
+        };
+      }
+
+      let username = String(msg.username || "")
+        .replace(/^@/, "")
+        .trim();
+      if (!username) {
+        try {
+          const tabs = await chrome.tabs.query({
+            url: ["*://*.instagram.com/*", "*://instagram.com/*"],
+          });
+          const reserved = new Set([
+            "p",
+            "reel",
+            "reels",
+            "stories",
+            "explore",
+            "accounts",
+            "direct",
+            "tv",
+            "about",
+            "legal",
+          ]);
+          for (const tab of tabs || []) {
+            const url = String(tab?.url || "");
+            const match = url.match(
+              /instagram\.com\/([A-Za-z0-9._]+)\/?(?:\?|$|#)/,
+            );
+            const handle = match?.[1] || "";
+            if (handle && !reserved.has(handle.toLowerCase())) {
+              username = handle;
+              break;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      let warning = "";
+      if (!ds_user_id || !csrftoken) {
+        warning =
+          "Cookie terisi sebagian. Pastikan ds_user_id dan csrftoken ikut ter-export dari DevTools.";
+      } else if (!username) {
+        warning =
+          "Cookie terisi. Isi username Instagram lalu klik Verifikasi & Connect.";
+      }
+
+      return {
+        ok: true,
+        cookies: jar,
+        warning: warning || undefined,
+        values: {
+          sessionid,
+          ds_user_id,
+          csrftoken,
+          mid: jar.mid || "",
+          ig_did: jar.ig_did || "",
+          datr: jar.datr || "",
+          username,
+          avatarUrl: "",
+        },
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Gagal membaca cookie Instagram dari browser.",
+      };
+    }
+  }
+
   if (msg?.type === "GET_TIKTOK_COOKIES") {
     try {
       const list = await chrome.cookies.getAll({ domain: "tiktok.com" });
@@ -905,9 +1039,10 @@ async function handleMessage(msg, sender) {
         };
       }
 
-      // Resolve username/secUid from open TikTok viewport (+ in-tab profile fetch)
+      // Resolve username/secUid/avatar from open TikTok viewport (+ in-tab profile fetch)
       let username = "";
       let secUid = "";
+      let avatarUrl = "";
       let userWarning = "";
       const uniqueIdHint = String(msg.uniqueId || "")
         .replace(/^@/, "")
@@ -917,6 +1052,7 @@ async function handleMessage(msg, sender) {
         if (user?.username) {
           username = user.username;
           secUid = user.secUid || "";
+          avatarUrl = user.avatarUrl || "";
         }
         if (!secUid) {
           const hasTab = Boolean(await findTikTokTab(uniqueIdHint || username));
@@ -940,6 +1076,7 @@ async function handleMessage(msg, sender) {
           s_v_web_id: jar.s_v_web_id || jar.verifyFp || "",
           username,
           secUid,
+          avatarUrl,
         },
       };
     } catch (err) {
@@ -1080,26 +1217,6 @@ async function handleMessage(msg, sender) {
     });
     if (result?.ok) return { ok: true };
     return { ok: false, error: result?.error || "UNDIGG gagal" };
-  }
-
-  /** Uncollect favorite entirely in page MAIN world (csrf + full query). */
-  if (msg?.type === "UNCOLLECT") {
-    const tabId = sender?.tab?.id;
-    if (!tabId) return { ok: false, error: "No tab for UNCOLLECT" };
-    const itemId = String(msg.itemId || "").trim();
-    if (!itemId) return { ok: false, error: "itemId wajib" };
-
-    const [{ result } = {}] = await chrome.scripting.executeScript({
-      target: { tabId },
-      world: "MAIN",
-      func: uncollectInMainWorld,
-      args: [itemId],
-    });
-    if (result?.ok) return { ok: true };
-    return {
-      ok: false,
-      error: result?.error || "UNCOLLECT gagal",
-    };
   }
 
   return { ok: false, error: "Unknown message" };

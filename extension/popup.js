@@ -8,7 +8,6 @@ const STORAGE_TAB_KEY = "rrPopupTab";
 
 function modeLabel(mode) {
   if (mode === "like" || mode === "liked") return "like";
-  if (mode === "favorite") return "favorite";
   if (mode === "repost") return "repost";
   return "—";
 }
@@ -81,7 +80,6 @@ function viewFromSnapshot(snap) {
       byMode: {
         repost: { removed: 0 },
         like: { removed: 0 },
-        favorite: { removed: 0 },
       },
       updatedAt: 0,
     };
@@ -96,7 +94,6 @@ function viewFromSnapshot(snap) {
       byMode: snap.byMode || {
         repost: { removed: 0 },
         like: { removed: 0 },
-        favorite: { removed: 0 },
       },
       updatedAt: snap.updatedAt || 0,
     };
@@ -119,7 +116,6 @@ function viewFromSnapshot(snap) {
     byMode: snap.byMode || {
       repost: { removed: 0 },
       like: { removed: 0 },
-      favorite: { removed: 0 },
     },
     updatedAt: snap.updatedAt || 0,
   };
@@ -127,10 +123,18 @@ function viewFromSnapshot(snap) {
 
 function renderMetrics(data, state) {
   const metrics = viewFromSnapshot(data?.metrics);
-  const session = data?.session || null;
+  const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+  const ttSession =
+    data?.tiktokSession ||
+    accounts.find((a) => a?.platform === "tiktok") ||
+    (data?.session?.platform === "tiktok" ? data.session : null);
+  const igSession =
+    data?.instagramSession ||
+    accounts.find((a) => a?.platform === "instagram") ||
+    (data?.session?.platform === "instagram" ? data.session : null);
 
-  renderAccount(document.getElementById("ttAccount"), session, "tiktok");
-  renderAccount(document.getElementById("igAccount"), session, "instagram");
+  renderAccount(document.getElementById("ttAccount"), ttSession, "tiktok");
+  renderAccount(document.getElementById("igAccount"), igSession, "instagram");
 
   document.getElementById("ttRemoved").textContent = String(metrics.removed);
   document.getElementById("ttFailed").textContent = String(metrics.failed);
@@ -142,13 +146,11 @@ function renderMetrics(data, state) {
   document.getElementById("ttLike").textContent = String(
     metrics.byMode?.like?.removed || 0,
   );
-  document.getElementById("ttFavorite").textContent = String(
-    metrics.byMode?.favorite?.removed || 0,
-  );
 
   document.getElementById("igConnects").textContent = String(metrics.connects);
-  document.getElementById("igSession").textContent =
-    session?.platform === "instagram" && session?.user ? "ON" : "OFF";
+  document.getElementById("igSession").textContent = igSession?.user
+    ? "ON"
+    : "OFF";
 
   const st = state || {};
   const statusEl = document.getElementById("ttStatus");

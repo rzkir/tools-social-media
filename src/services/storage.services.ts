@@ -12,7 +12,7 @@ function notifyMetricsUpdated() {
 	window.dispatchEvent(new Event(METRICS_UPDATED_EVENT));
 }
 
-export type JobMode = "repost" | "like" | "favorite";
+export type JobMode = "repost" | "like";
 
 export type MetricsEventType =
 	| "job_done"
@@ -112,7 +112,6 @@ function emptySnapshot(): MetricsSnapshot {
 		byMode: {
 			repost: { ...EMPTY_MODE },
 			like: { ...EMPTY_MODE },
-			favorite: { ...EMPTY_MODE },
 		},
 		daily: [],
 		events: [],
@@ -133,7 +132,6 @@ function nextId(): string {
 
 function normalizeMode(mode: string | undefined): JobMode {
 	if (mode === "like" || mode === "liked") return "like";
-	if (mode === "favorite") return "favorite";
 	return "repost";
 }
 
@@ -271,7 +269,6 @@ export function loadMetrics(): MetricsSnapshot {
 		byMode: {
 			repost: { ...EMPTY_MODE, ...(raw.byMode?.repost || {}) },
 			like: { ...EMPTY_MODE, ...(raw.byMode?.like || {}) },
-			favorite: { ...EMPTY_MODE, ...(raw.byMode?.favorite || {}) },
 		},
 		daily: Array.isArray(raw.daily) ? raw.daily.slice(-60) : [],
 		events: Array.isArray(raw.events) ? raw.events.slice(0, MAX_EVENTS) : [],
@@ -327,12 +324,7 @@ export function recordJobResult(input: {
 				: "job_error";
 
 	const title =
-		input.label ||
-		(mode === "like"
-			? "Remove Likes"
-			: mode === "favorite"
-				? "Remove Favorite"
-				: "Remove Repost");
+		input.label || (mode === "like" ? "Remove Likes" : "Remove Repost");
 
 	snap.events = pushEvent(snap.events, {
 		type,

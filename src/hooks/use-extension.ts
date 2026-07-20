@@ -5,6 +5,7 @@ import {
 	confirmExtensionRemoveMutation,
 	extensionInstalledOptions,
 	extensionStateOptions,
+	fetchInstagramCookiesMutation,
 	fetchTikTokCookiesMutation,
 	setExtensionStateCache,
 	startExtensionJobMutation,
@@ -43,7 +44,7 @@ export function useStartExtensionJob() {
 			uniqueId: string;
 			secUid?: string;
 			delayMs: number;
-			mode?: "repost" | "favorite" | "like";
+			mode?: "repost" | "like";
 		}) => startExtensionJobMutation(queryClient, options),
 	});
 }
@@ -67,5 +68,12 @@ export function useFetchTikTokCookies() {
 	return useMutation({
 		mutationFn: (options?: { uniqueId?: string }) =>
 			fetchTikTokCookiesMutation(options),
+	});
+}
+
+export function useFetchInstagramCookies() {
+	return useMutation({
+		mutationFn: (options?: { username?: string }) =>
+			fetchInstagramCookiesMutation(options),
 	});
 }
