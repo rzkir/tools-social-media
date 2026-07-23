@@ -26,7 +26,13 @@ export function MinimizedProgressDock() {
 	const progress = extState?.progress;
 	const current = progress?.current ?? null;
 	const copy = job
-		? statusCopy(status, job.listingWord, progress, extState?.lastError)
+		? statusCopy(
+				status,
+				job.listingWord,
+				progress,
+				extState?.lastError,
+				job.platform || extState?.platform || "tiktok",
+			)
 		: { title: "", detail: "" };
 	const pct = progressPercent(extState);
 	const timing = status === "removing" && Boolean(extState?.startedAt);
@@ -46,7 +52,7 @@ export function MinimizedProgressDock() {
 	if (!active || !job || typeof document === "undefined") return null;
 
 	return createPortal(
-		<div className="fixed right-4 bottom-4 z-[60] w-[min(100vw-2rem,22rem)]">
+		<div className="fixed right-4 bottom-4 z-[210] w-[min(100vw-2rem,22rem)]">
 			<div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
 				<div className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 py-3">
 					<div className="min-w-0">

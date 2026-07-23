@@ -55,7 +55,7 @@ export function Dialog({
 	if (!open || typeof document === "undefined") return null;
 
 	return createPortal(
-		<div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+		<div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
 			<button
 				type="button"
 				aria-label={onMinimize ? "Minimize dialog" : "Close dialog"}

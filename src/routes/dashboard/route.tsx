@@ -17,26 +17,30 @@ function DashboardLayout() {
 	// Placeholder until login/auth gate — swap for session check later.
 	const [ready, setReady] = useState(false);
 
-	if (!ready) {
-		return (
-			<LoadingScreen
-				brand="Social Tools"
-				captainStatus="Menyiapkan dashboard..."
-				onComplete={() => setReady(true)}
-			/>
-		);
-	}
-
 	return (
 		<NotificationProvider>
 			<MinimizeProvider>
-				<div className="dashboard-shell flex min-h-screen bg-[#F8FAFC] text-slate-800">
+				{!ready ? (
+					<LoadingScreen
+						brand="Social Tools"
+						captainStatus="Menyiapkan dashboard..."
+						onComplete={() => setReady(true)}
+						className="fixed inset-0 z-[200]"
+					/>
+				) : null}
+
+				<div
+					className="dashboard-shell flex min-h-screen bg-[#F8FAFC] text-slate-800"
+					aria-hidden={!ready}
+				>
 					<Sidebar />
 					<main className="main-content-area ml-64 flex-1 p-8">
 						<DashboardHeader />
 						<Outlet />
 					</main>
 				</div>
+
+				{/* Always mounted so progress overlay survives loading / remounts */}
 				<ProgressHost />
 			</MinimizeProvider>
 		</NotificationProvider>

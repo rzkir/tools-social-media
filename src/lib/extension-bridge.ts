@@ -264,19 +264,46 @@ export async function startExtensionJob(options: {
 	};
 	for (const cb of stateListeners) cb(lastState);
 
-	const res = (await sendToExtension({
-		type: "START",
-		uniqueId: options.uniqueId,
-		secUid: options.secUid || "",
-		delayMs: options.delayMs,
-		mode: options.mode || "repost",
-		platform,
-	})) as { ok?: boolean; error?: string };
-	return { ok: Boolean(res?.ok), error: res?.error };
-}
+	try {
+		const res = (await sendToExtension({
+			type: "START",
+			uniqueId: options.uniqueId,
+			secUid: options.secUid || "",
+			delayMs: options.delayMs,
+			mode: options.mode || "repost",
+			platform,
+		})) as { ok?: boolean; error?: string };
 
-export async function stopExtensionJob(): Promise<void> {
-	await sendToExtension({ type: "STOP" });
+		if (!res?.ok) {
+			lastState = {
+				...lastState,
+				running: false,
+				status: "error",
+				lastError:
+					res?.error ||
+					"Gagal memulai. Pastikan ekstensi terpasang untuk domain production, lalu hard refresh.",
+				endedAt: Date.now(),
+			};
+			for (const cb of stateListeners) cb(lastState);
+			return { ok: false, error: lastState.lastError || undefined };
+		}
+
+		return { ok: true };
+	} catch (err) {
+		const message =
+			err instanceof Error
+				? err.message
+				: "Extension tidak merespons. Reload ekstensi + hard refresh dashboard.";
+		lastState = {
+			...lastState!,
+			running: false,
+			status: "error",
+			lastError: message,
+			endedAt: Date.now(),
+		};
+		for (const cb of stateListeners) cb(lastState);
+		return { ok: false, error: message };
+	}
 }
 
 export async function confirmExtensionRemove(options: {
@@ -284,12 +311,65 @@ export async function confirmExtensionRemove(options: {
 	platform?: "tiktok" | "instagram";
 }): Promise<{ ok: boolean; error?: string }> {
 	const limit = Math.max(1, Math.floor(Number(options.limit) || 1));
-	const res = (await sendToExtension({
-		type: "CONFIRM_REMOVE",
-		limit,
-		platform: options.platform,
-	})) as { ok?: boolean; error?: string };
-	return { ok: Boolean(res?.ok), error: res?.error };
+	const platform = options.platform === "instagram" ? "instagram" : "tiktok";
+	try {
+		const res = (await sendToExtension({
+			type: "CONFIRM_REMOVE",
+			limit,
+			platform,
+		})) as { ok?: boolean; error?: string };
+
+		if (!res?.ok) {
+			const error =
+				res?.error ||
+				`Gagal konfirmasi hapus di ${platform === "instagram" ? "Instagram" : "TikTok"}.`;
+			if (lastState) {
+				lastState = {
+					...lastState,
+					running: false,
+					status: "error",
+					lastError: error,
+					endedAt: Date.now(),
+				};
+				for (const cb of stateListeners) cb(lastState);
+			}
+			return { ok: false, error };
+		}
+		return { ok: true };
+	} catch (err) {
+		const message =
+			err instanceof Error
+				? err.message
+				: "Extension tidak merespons saat konfirmasi hapus.";
+		if (lastState) {
+			lastState = {
+				...lastState,
+				running: false,
+				status: "error",
+				lastError: message,
+				endedAt: Date.now(),
+			};
+			for (const cb of stateListeners) cb(lastState);
+		}
+		return { ok: false, error: message };
+	}
+}
+
+export async function stopExtensionJob(): Promise<void> {
+	try {
+		await sendToExtension({ type: "STOP" });
+	} catch {
+		// Best-effort stop — UI still moves to stopped if state was running
+		if (lastState?.running) {
+			lastState = {
+				...lastState,
+				running: false,
+				status: "stopped",
+				endedAt: Date.now(),
+			};
+			for (const cb of stateListeners) cb(lastState);
+		}
+	}
 }
 
 export async function fetchExtensionState(): Promise<ExtensionState | null> {

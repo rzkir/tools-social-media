@@ -101,7 +101,7 @@ export function ProgressHost() {
 		if (status === "ready") {
 			notify.info(
 				`Ditemukan ${progress?.listed ?? 0} ${word}. Atur jumlah lalu Hapus.`,
-				{ title: "Siap dihapus" },
+				{ title: `${job.modeLabel} · siap` },
 			);
 			return;
 		}
@@ -111,7 +111,7 @@ export function ProgressHost() {
 				status,
 				removed: progress?.done ?? 0,
 				failed: progress?.failed ?? 0,
-				label: job.modeLabel,
+				label: `${job.modeLabel}${job.platform === "instagram" ? " · Instagram" : " · TikTok"}`,
 				error: extState.lastError,
 				items: collectedItemsRef.current,
 			});
@@ -163,6 +163,7 @@ export function ProgressHost() {
 				}}
 				modeLabel={job.modeLabel}
 				listingWord={job.listingWord}
+				platform={job.platform || "tiktok"}
 				extState={extState}
 				running={running}
 				onStop={() => void stopJob()}

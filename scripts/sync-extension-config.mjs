@@ -1,7 +1,10 @@
 /**
  * Sync extension dashboard URLs from PUBLIC_URL.
- * Development → .env.local (fallback .env)
- * Production  → .env.production (fallback .env)
+ * Always includes both development + production origins so one packed
+ * extension works on localhost and the live site (progress bridge).
+ *
+ * Development → prefers .env.local
+ * Production  → prefers .env.production
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -56,6 +59,36 @@ function loadPublicUrl(mode) {
 	return { publicUrl: "http://localhost:3000", source: "default" };
 }
 
+/** Collect every known dashboard origin so content-bridge injects in all envs. */
+function collectDashboardOrigins(primaryUrl) {
+	const urls = new Set();
+	const add = (raw) => {
+		if (!raw) return;
+		try {
+			urls.add(new URL(raw.replace(/\/$/, "")).origin);
+		} catch {
+			// ignore invalid
+		}
+	};
+
+	add(primaryUrl);
+	add(readEnvValue(".env.local", "PUBLIC_URL"));
+	add(readEnvValue(".env.production", "PUBLIC_URL"));
+	add(readEnvValue(".env", "PUBLIC_URL"));
+	add(process.env.PUBLIC_URL);
+	add("http://localhost:3000");
+
+	// wrangler.jsonc vars.PUBLIC_URL
+	const wranglerPath = path.join(root, "wrangler.jsonc");
+	if (fs.existsSync(wranglerPath)) {
+		const raw = fs.readFileSync(wranglerPath, "utf8");
+		const match = raw.match(/"PUBLIC_URL"\s*:\s*"([^"]+)"/);
+		if (match?.[1]) add(match[1]);
+	}
+
+	return [...urls];
+}
+
 const mode = parseMode(process.argv.slice(2));
 const { publicUrl, source } = loadPublicUrl(mode);
 let origin;
@@ -66,7 +99,8 @@ try {
 	process.exit(1);
 }
 
-const match = `${origin}/*`;
+const origins = collectDashboardOrigins(publicUrl);
+const matches = origins.map((o) => `${o}/*`);
 
 const configPath = path.join(root, "extension", "config.js");
 fs.writeFileSync(
@@ -82,8 +116,8 @@ const instagramHosts = [
 	"https://www.instagram.com/*",
 	"https://*.instagram.com/*",
 ];
-manifest.host_permissions = [...tiktokHosts, ...instagramHosts, match];
-manifest.externally_connectable = { matches: [match] };
+manifest.host_permissions = [...tiktokHosts, ...instagramHosts, ...matches];
+manifest.externally_connectable = { matches: [...matches] };
 
 const tiktokScript = manifest.content_scripts.find((c) =>
 	c.js?.includes("content-tiktok.js"),
@@ -96,7 +130,7 @@ const bridgeScript = manifest.content_scripts.find((c) =>
 );
 if (tiktokScript) tiktokScript.matches = [...tiktokHosts];
 if (instagramScript) instagramScript.matches = [...instagramHosts];
-if (bridgeScript) bridgeScript.matches = [match];
+if (bridgeScript) bridgeScript.matches = [...matches];
 
 if (!instagramScript) {
 	manifest.content_scripts.push({
@@ -142,4 +176,7 @@ try {
 	);
 }
 
-console.log(`Synced extension PUBLIC_URL [${mode}] → ${publicUrl} (from ${source})`);
+console.log(
+	`Synced extension PUBLIC_URL [${mode}] → ${publicUrl} (from ${source})`,
+);
+console.log(`Bridge matches: ${matches.join(", ")}`);

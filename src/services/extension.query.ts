@@ -36,8 +36,23 @@ export const extensionStateOptions = queryOptions({
 	initialData: (): ExtensionState | null => getLastExtensionState(),
 	staleTime: Number.POSITIVE_INFINITY,
 	gcTime: Number.POSITIVE_INFINITY,
-	refetchOnWindowFocus: false,
-	refetchOnReconnect: false,
+	// Poll as fallback when content-bridge STATE push is blocked (prod / CSP)
+	refetchInterval: (query) => {
+		const state = query.state.data;
+		if (!state?.status) return false;
+		if (
+			state.status === "idle" ||
+			state.status === "done" ||
+			state.status === "stopped" ||
+			state.status === "error" ||
+			state.status === "ready"
+		) {
+			return false;
+		}
+		return 1_500;
+	},
+	refetchOnWindowFocus: true,
+	refetchOnReconnect: true,
 	retry: false,
 });
 

@@ -11,11 +11,14 @@ import type {
 } from "#/lib/extension-bridge";
 import { useElapsedMs } from "#/lib/use-elapsed-ms";
 
+export type ProgressPlatform = "tiktok" | "instagram";
+
 export type TikTokProgressDialogProps = {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	modeLabel: string;
 	listingWord: string;
+	platform?: ProgressPlatform;
 	extState: ExtensionState | null;
 	running: boolean;
 	onStop: () => void;
@@ -23,18 +26,24 @@ export type TikTokProgressDialogProps = {
 	onConfirmRemove?: (limit: number) => Promise<void>;
 };
 
+function siteLabel(platform?: ProgressPlatform | null) {
+	return platform === "instagram" ? "Instagram" : "TikTok";
+}
+
 export function statusCopy(
 	status: string,
 	listingWord: string,
 	progress: ExtensionState["progress"] | undefined,
 	lastError?: string | null,
+	platform?: ProgressPlatform | null,
 ): { title: string; detail: string } {
+	const site = siteLabel(platform);
 	switch (status) {
 		case "starting":
 		case "navigating":
 			return {
 				title: "Menyiapkan…",
-				detail: "Membuka tab TikTok dan menyiapkan sesi.",
+				detail: `Membuka tab ${site} dan menyiapkan sesi.`,
 			};
 		case "listing":
 			return {
@@ -64,7 +73,7 @@ export function statusCopy(
 		case "error":
 			return {
 				title: /rate-?limit/i.test(lastError || "")
-					? "Rate-limit TikTok"
+					? `Rate-limit ${site}`
 					: "Gagal",
 				detail:
 					lastError ||
@@ -183,6 +192,7 @@ export function TikTokProgressDialog({
 	onOpenChange,
 	modeLabel,
 	listingWord,
+	platform = "tiktok",
 	extState,
 	running,
 	onStop,
@@ -193,7 +203,15 @@ export function TikTokProgressDialog({
 	const progress = extState?.progress;
 	const listed = progress?.listed ?? 0;
 	const current = progress?.current ?? null;
-	const copy = statusCopy(status, listingWord, progress, extState?.lastError);
+	const resolvedPlatform =
+		(extState?.platform as ProgressPlatform | null | undefined) || platform;
+	const copy = statusCopy(
+		status,
+		listingWord,
+		progress,
+		extState?.lastError,
+		resolvedPlatform,
+	);
 	const pct = progressPercent(extState);
 	const showBar = status === "removing";
 	const isReady = status === "ready";

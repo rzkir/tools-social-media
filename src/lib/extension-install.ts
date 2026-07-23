@@ -1,9 +1,9 @@
 /** Download packed extension + short install hint for the UI. */
 export const EXTENSION_ZIP_URL = "/extension.zip";
-export const EXTENSION_ZIP_NAME = "remove-tiktok-extension.zip";
+export const EXTENSION_ZIP_NAME = "social-tools-extension.zip";
 
 export const EXTENSION_INSTALL_HINT =
-	"Zip terunduh. Extract → double-klik INSTALL.bat (path otomatis tersalin + buka chrome://extensions). Aktifkan Developer mode → Load unpacked → Ctrl+V → hard refresh dashboard.";
+	"Zip terunduh. Extract → double-klik INSTALL.bat (path otomatis tersalin + buka chrome://extensions). Aktifkan Developer mode → Load unpacked → Ctrl+V → hard refresh dashboard (TikTok & Instagram).";
 
 export function downloadExtensionZip() {
 	if (typeof document === "undefined") return;

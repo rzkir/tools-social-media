@@ -173,26 +173,34 @@ export function TikTokRemoveTool({ mode }: { mode: RemoveToolMode }) {
 			modeLabel: copy.title,
 			listingWord: copy.listingWord,
 		});
-        const result = await startJob.mutateAsync({
-			uniqueId: handle,
-			secUid: secUid.trim() || undefined,
-			delayMs: SPEED_DELAY_MS[speed],
-			mode,
-			platform: "tiktok",
-		});
-		if (!result.ok) {
-			const msg = result.error || "Gagal memulai.";
+		try {
+			const result = await startJob.mutateAsync({
+				uniqueId: handle,
+				secUid: secUid.trim() || undefined,
+				delayMs: SPEED_DELAY_MS[speed],
+				mode,
+				platform: "tiktok",
+			});
+			if (!result.ok) {
+				const msg = result.error || "Gagal memulai.";
+				setError(msg);
+				notify?.error(msg, { title: "Gagal Start" });
+				statusAlert.error("Gagal Start", msg);
+			} else {
+				notify?.info(`Memuat daftar ${copy.listingWord}…`, {
+					title: copy.title,
+				});
+				statusAlert.info(
+					copy.title,
+					`Memuat daftar ${copy.listingWord}… Progress muncul di dialog. Atur jumlah lalu Hapus.`,
+				);
+			}
+		} catch (err) {
+			const msg =
+				err instanceof Error ? err.message : "Gagal memulai job ekstensi.";
 			setError(msg);
 			notify?.error(msg, { title: "Gagal Start" });
 			statusAlert.error("Gagal Start", msg);
-		} else {
-			notify?.info(`Memuat daftar ${copy.listingWord}…`, {
-				title: copy.title,
-			});
-			statusAlert.info(
-				copy.title,
-				`Memuat daftar ${copy.listingWord}… Progress muncul di dialog. Atur jumlah lalu Hapus.`,
-			);
 		}
 	};
 

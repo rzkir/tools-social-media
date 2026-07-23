@@ -148,26 +148,34 @@ export function InstagramRemoveTool() {
 			modeLabel: COPY.title,
 			listingWord: COPY.listingWord,
 		});
-		const result = await startJob.mutateAsync({
-			uniqueId: handle,
-			secUid: userId.trim() || undefined,
-			delayMs: SPEED_DELAY_MS[speed],
-			mode: "repost",
-			platform: "instagram",
-		});
-		if (!result.ok) {
-			const msg = result.error || "Gagal memulai.";
+		try {
+			const result = await startJob.mutateAsync({
+				uniqueId: handle,
+				secUid: userId.trim() || undefined,
+				delayMs: SPEED_DELAY_MS[speed],
+				mode: "repost",
+				platform: "instagram",
+			});
+			if (!result.ok) {
+				const msg = result.error || "Gagal memulai.";
+				setError(msg);
+				notify?.error(msg, { title: "Gagal Start" });
+				statusAlert.error("Gagal Start", msg);
+			} else {
+				notify?.info(`Memuat daftar ${COPY.listingWord}…`, {
+					title: COPY.title,
+				});
+				statusAlert.info(
+					COPY.title,
+					`Memuat daftar ${COPY.listingWord}… Progress muncul di dialog. Atur jumlah lalu Hapus.`,
+				);
+			}
+		} catch (err) {
+			const msg =
+				err instanceof Error ? err.message : "Gagal memulai job ekstensi.";
 			setError(msg);
 			notify?.error(msg, { title: "Gagal Start" });
 			statusAlert.error("Gagal Start", msg);
-		} else {
-			notify?.info(`Memuat daftar ${COPY.listingWord}…`, {
-				title: COPY.title,
-			});
-			statusAlert.info(
-				COPY.title,
-				`Memuat daftar ${COPY.listingWord}… Progress muncul di dialog. Atur jumlah lalu Hapus.`,
-			);
 		}
 	};
 
