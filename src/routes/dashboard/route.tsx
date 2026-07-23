@@ -1,4 +1,6 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { useState } from "react";
+import LoadingScreen from "#/components/LoadingScreen";
 import { ProgressHost } from "#/components/ProgressHost";
 import { DashboardHeader } from "#/components/ui/header";
 import { Sidebar } from "#/components/ui/sidebar";
@@ -12,6 +14,18 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardLayout() {
 	useMetricsCacheSync();
+	// Placeholder until login/auth gate — swap for session check later.
+	const [ready, setReady] = useState(false);
+
+	if (!ready) {
+		return (
+			<LoadingScreen
+				brand="Social Tools"
+				captainStatus="Menyiapkan dashboard..."
+				onComplete={() => setReady(true)}
+			/>
+		);
+	}
 
 	return (
 		<NotificationProvider>

@@ -27,7 +27,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "Remove Repost TikTok",
+				title: "Social Tools - Bersihkan Jejak Digital dalam 1 Klik",
 			},
 		],
 		links: [
@@ -43,12 +43,12 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
 function RootDocument({ children }: { children: React.ReactNode }) {
 	return (
-		<html lang="en" suppressHydrationWarning>
+		<html lang="id" suppressHydrationWarning>
 			<head>
 				<script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
 				<HeadContent />
 			</head>
-			<body className="font-sans antialiased wrap-anywhere selection:bg-indigo-100">
+			<body className="font-sans antialiased wrap-anywhere selection:bg-indigo-100 selection:text-indigo-600">
 				{children}
 				<TanStackDevtools
 					config={{
